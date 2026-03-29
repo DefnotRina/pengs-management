@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 210 20% 98%;
+        --foreground: 220 40% 8%;
+
+        --card: 0 0% 100%;
+        --card-foreground: 220 40% 8%;
+
+        --popover: 0 0% 100%;
+        --popover-foreground: 220 40% 8%;
+
+        --primary: 25 95% 53%;
+        --primary-foreground: 0 0% 100%;
+
+        --secondary: 220 14% 96%;
+        --secondary-foreground: 220 40% 8%;
+
+        --muted: 220 14% 96%;
+        --muted-foreground: 220 9% 46%;
+
+        --accent: 220 14% 96%;
+        --accent-foreground: 220 40% 8%;
+
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 0 0% 100%;
+
+        --success: 142 72% 37%;
+        --success-foreground: 0 0% 100%;
+
+        --warning: 38 92% 44%;
+        --warning-foreground: 0 0% 100%;
+
+        --border: 220 13% 91%;
+        --input: 220 13% 91%;
+        --ring: 25 95% 53%;
+
+        --radius: 0.625rem;
+
+        --sidebar-background: 0 0% 100%;
+        --sidebar-foreground: 220 40% 8%;
+        --sidebar-primary: 25 95% 53%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 25 95% 96%;
+        --sidebar-accent-foreground: 25 95% 40%;
+        --sidebar-border: 220 13% 91%;
+        --sidebar-ring: 25 95% 53%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground font-sans antialiased;
+        font-family: 'Inter', sans-serif;
+    }
+}
+
+@layer utilities {
+    .stat-number {
+        @apply text-2xl md:text-3xl font-bold tracking-tight;
+    }
+
+    .touch-target {
+        @apply min-h-[44px] min-w-[44px];
+    }
+}
