@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import html2canvas from "html2canvas";
+import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/StatCard";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -311,36 +312,35 @@ export default function Payroll() {
       {/* Simplified Week Navigation Filter */}
       <div className="bg-card rounded-2xl border p-4 shadow-sm">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex flex-col">
+            <div className="flex flex-col items-center md:items-start">
                 <span className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-1">Payroll Period</span>
-                <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <h2 className="text-sm md:text-lg font-bold text-foreground flex items-center gap-2">
                     {formatDate(startOfWeek(baseDate, { weekStartsOn: 1 }))}
                     <span className="text-muted-foreground font-medium">—</span>
                     {formatDate(endOfWeek(baseDate, { weekStartsOn: 1 }))}
                 </h2>
             </div>
             
-            <div className="flex items-center gap-2 bg-muted/40 p-1 rounded-full border shadow-inner">
-                <Button variant="ghost" size="sm" onClick={handlePrevWeek} className="h-9 px-4 rounded-full text-xs font-semibold hover:bg-background">
+            <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-full border shadow-inner w-full md:w-auto overflow-x-auto scrollbar-hide">
+                <Button variant="ghost" size="sm" onClick={handlePrevWeek} className="h-8 md:h-9 px-2 md:px-4 rounded-full text-[9px] md:text-xs font-semibold hover:bg-background flex-1 md:flex-none whitespace-nowrap">
                     Previous Week
                 </Button>
-                <div className="w-px h-4 bg-border"></div>
-                <Button variant="ghost" size="sm" onClick={handleThisWeek} className={`h-9 px-4 rounded-full text-xs font-bold uppercase tracking-tight ${format(baseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd") ? 'bg-background text-primary shadow-sm' : ''}`}>
+                <div className="w-px h-3 md:h-4 bg-border shrink-0"></div>
+                <Button variant="ghost" size="sm" onClick={handleThisWeek} className={`h-8 md:h-9 px-2 md:px-4 rounded-full text-[9px] md:text-xs font-bold uppercase tracking-tight flex-1 md:flex-none whitespace-nowrap ${format(baseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd") ? 'bg-white text-primary shadow-sm border border-border/50' : ''}`}>
                     This Week
                 </Button>
-                <div className="w-px h-4 bg-border"></div>
-                <Button variant="ghost" size="sm" onClick={handleNextWeek} className="h-9 px-4 rounded-full text-xs font-semibold hover:bg-background">
+                <div className="w-px h-3 md:h-4 bg-border shrink-0"></div>
+                <Button variant="ghost" size="sm" onClick={handleNextWeek} className="h-8 md:h-9 px-2 md:px-4 rounded-full text-[9px] md:text-xs font-semibold hover:bg-background flex-1 md:flex-none whitespace-nowrap">
                     Next Week
                 </Button>
             </div>
 
             <div className="hidden lg:block">
                 <label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-1 block text-right">Specific Date</label>
-                <Input 
-                    type="date" 
-                    value={format(baseDate, "yyyy-MM-dd")} 
-                    onChange={e => setBaseDate(parseISO(e.target.value))} 
-                    className="h-9 text-xs font-semibold w-40 rounded-lg" 
+                <DatePicker 
+                    date={baseDate} 
+                    onChange={(date) => date && setBaseDate(date)} 
+                    className="h-9 text-xs font-semibold w-40 rounded-lg shadow-sm" 
                 />
             </div>
         </div>
@@ -355,51 +355,51 @@ export default function Payroll() {
             </DialogHeader>
             {selectedEmp && (
                 <div className="bg-card">
-                    <div className="p-6 border-b border-border bg-slate-50 dark:bg-slate-900">
-                        <h2 className="text-xl font-semibold flex items-center justify-between">
+                    <div className="p-4 md:p-6 border-b border-border bg-slate-50 dark:bg-slate-900">
+                        <h2 className="text-base md:text-xl font-semibold flex items-center gap-2 pr-8">
+                            <Receipt className="h-5 w-5 md:h-6 md:w-6 text-primary" />
                             Payslip Preview
-                            <Receipt className="h-6 w-6 text-muted-foreground" />
                         </h2>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-[11px] md:text-sm text-muted-foreground mt-0.5 md:mt-1">
                             {selectedEmp.names} • {weekStart} to {weekEnd}
                         </p>
                     </div>
 
-                    <div className="p-6 space-y-6">
+                    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                         {/* Daily Breakdown */}
-                        {selectedEmp.pay_type === 'pay per output' && (
+                        {selectedEmp.pay_type?.toLowerCase().includes('output') && (
                             <div>
-                                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex justify-between">
+                                <h3 className="text-[11px] md:text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2 md:mb-3 flex justify-between">
                                     <span>Production Output</span>
                                     <span>{selectedEmp.totalPieces.toLocaleString()} pcs</span>
                                 </h3>
-                                <div className="space-y-2 bg-muted/20 p-4 rounded-lg border border-border">
+                                <div className="space-y-1.5 md:space-y-2 bg-muted/20 p-3 md:p-4 rounded-lg border border-border">
                                     {Object.entries(selectedEmp?.dailyProduction || {}).map(([date, pcs]: any) => (
-                                        <div key={date} className="flex justify-between items-center text-sm border-b border-border/40 pb-2 last:border-0 last:pb-0">
+                                        <div key={date} className="flex justify-between items-center text-xs md:text-sm border-b border-border/40 pb-1.5 md:pb-2 last:border-0 last:pb-0">
                                             <span className="font-medium text-muted-foreground">{date}</span>
                                             <span className="font-bold text-foreground">{(pcs || 0).toLocaleString()} pcs</span>
                                         </div>
                                     ))}
                                     {Object.keys(selectedEmp?.dailyProduction || {}).length === 0 && (
-                                        <p className="text-xs text-center text-muted-foreground">No production mapped for this week.</p>
+                                        <p className="text-[10px] md:text-xs text-center text-muted-foreground">No production mapped for this week.</p>
                                     )}
                                 </div>
-                                <div className="flex justify-between items-center mt-3 pt-3 border-t border-border px-1">
-                                    <span className="font-bold text-foreground">Gross Income calculation:</span>
-                                    <span className="font-bold text-success">{formatCurrency(selectedEmp.computedPay)}</span>
+                                <div className="flex justify-between items-center mt-2.5 md:mt-3 pt-2.5 md:pt-3 border-t border-border px-1">
+                                    <span className="text-xs md:text-sm font-bold text-foreground">Gross Income calculation:</span>
+                                    <span className="text-xs md:text-sm font-bold text-success">{formatCurrency(selectedEmp.computedPay)}</span>
                                 </div>
                             </div>
                         )}
 
                         {/* Deductions Builder */}
                         <div>
-                            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex justify-between">
+                            <h3 className="text-[11px] md:text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2 md:mb-3 flex justify-between">
                                 <span>Deductions</span>
                                 <span className="text-destructive">-{formatCurrency(currentTotalDeductions)}</span>
                             </h3>
                             
                             {selectedEmp.caBalance > 0 && (
-                                <p className="text-xs font-medium text-warning bg-warning/10 px-3 py-2 rounded-md mb-3">
+                                <p className="text-[10px] md:text-xs font-medium text-warning bg-warning/10 px-2 md:px-3 py-1.5 md:py-2 rounded-md mb-3">
                                     Outstanding C/A Balance: {formatCurrency(selectedEmp.caBalance)}
                                 </p>
                             )}
@@ -407,24 +407,24 @@ export default function Payroll() {
                             {/* CA Quick-Pick from ledger */}
                             {allCaData.filter(ca => ca.employee_name === selectedEmp.names && (ca.status !== 'Deducted' || selectedCaIds.includes(ca.id))).length > 0 && (
                                 <div className="mb-4">
-                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pick C/A to Deduct</p>
-                                    <div className="space-y-2">
+                                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pick C/A to Deduct</p>
+                                    <div className="space-y-1.5 md:space-y-2">
                                         {allCaData.filter(ca => ca.employee_name === selectedEmp.names && (ca.status !== 'Deducted' || selectedCaIds.includes(ca.id))).map((ca: any) => (
-                                            <label key={ca.id} className={`flex items-center gap-3 p-2.5 rounded-md border cursor-pointer transition-colors ${selectedCaIds.includes(ca.id) ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/20'}`}>
-                                                <input type="checkbox" checked={selectedCaIds.includes(ca.id)} onChange={() => toggleCa(ca)} className="accent-primary h-4 w-4" />
-                                                <span className="flex-1 text-sm">
+                                            <label key={ca.id} className={`flex items-center gap-2 md:gap-3 p-2 md:p-2.5 rounded-md border cursor-pointer transition-colors ${selectedCaIds.includes(ca.id) ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/20'}`}>
+                                                <input type="checkbox" checked={selectedCaIds.includes(ca.id)} onChange={() => toggleCa(ca)} className="accent-primary h-3.5 w-3.5 md:h-4 md:w-4" />
+                                                <span className="flex-1 text-xs md:text-sm">
                                                     <span className="font-medium">{ca.note || "Cash Advance"}</span>
-                                                    <span className="text-xs text-muted-foreground ml-2">{ca.date}</span>
+                                                    <span className="text-[10px] md:text-xs text-muted-foreground ml-2">{ca.date}</span>
                                                 </span>
-                                                <span className="text-sm font-bold text-destructive">{formatCurrency(ca.amount)}</span>
+                                                <span className="text-xs md:text-sm font-bold text-destructive">{formatCurrency(ca.amount)}</span>
                                             </label>
                                         ))}
                                     </div>
                                 </div>
                             )}
 
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Other Deductions</p>
-                            <div className="space-y-2 mb-3">
+                            <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Other Deductions</p>
+                            <div className="space-y-1.5 md:space-y-2 mb-3">
                                 {customDeductions.map((ded, idx) => (
                                     <div key={idx} className="flex gap-2 items-center">
                                         <Input 
@@ -434,7 +434,7 @@ export default function Payroll() {
                                                 newDeds[idx].label = e.target.value;
                                                 setCustomDeductions(newDeds);
                                             }} 
-                                            className="h-9 touch-target" 
+                                            className="h-8 md:h-9 text-xs md:text-sm touch-target" 
                                             placeholder="e.g. Rice" 
                                         />
                                         <Input 
@@ -446,33 +446,32 @@ export default function Payroll() {
                                                 newDeds[idx].amount = Number(e.target.value);
                                                 setCustomDeductions(newDeds);
                                             }} 
-                                            className="h-9 touch-target w-28 text-right" 
+                                            className="h-8 md:h-9 text-xs md:text-sm touch-target w-20 md:w-28 text-right" 
                                             placeholder="₱0.00" 
                                         />
-                                        <Button variant="ghost" size="icon" onClick={() => removeDeduction(idx)} className="h-9 w-9 text-destructive touch-target shrink-0">
+                                        <Button variant="ghost" size="icon" onClick={() => removeDeduction(idx)} className="h-8 w-8 md:h-9 md:w-9 text-destructive touch-target shrink-0">
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
                                 ))}
                             </div>
                             
-                            <div className="flex gap-2">
-                                <Input value={newDedLabel} onChange={e => setNewDedLabel(e.target.value)} placeholder="Add specific deduction" className="h-9" />
-                                <Input type="number" min="0" value={newDedAmount} onChange={e => setNewDedAmount(e.target.value)} placeholder="Amount" className="h-9 w-28 text-right" />
-                                <Button onClick={addCustomDeduction} variant="secondary" className="h-9 px-3 shrink-0"><Plus className="h-4 w-4" /></Button>
+                            <div className="flex gap-1.5 md:gap-2">
+                                <Input value={newDedLabel} onChange={e => setNewDedLabel(e.target.value)} placeholder="Add specific" className="h-8 md:h-9 text-xs md:text-sm grow" />
+                                <Input type="number" min="0" value={newDedAmount} onChange={e => setNewDedAmount(e.target.value)} placeholder="0.00" className="h-8 md:h-9 text-xs md:text-sm w-20 md:w-24 text-right" />
+                                <Button onClick={addCustomDeduction} variant="secondary" className="h-8 md:h-9 px-2.5 md:px-3 shrink-0"><Plus className="h-4 w-4" /></Button>
                             </div>
                         </div>
-
                     </div>
                     
                     {/* Sticky Footer */}
-                    <div className="p-6 border-t border-border bg-muted/10 sticky bottom-0">
-                        <div className="flex justify-between items-end mb-4">
-                            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Final Net Pay</span>
-                            <span className="text-3xl font-extrabold text-success">{formatCurrency(currentNetPay)}</span>
+                    <div className="p-4 md:p-6 border-t border-border bg-muted/10 sticky bottom-0">
+                        <div className="flex justify-between items-end mb-3 md:mb-4">
+                            <span className="text-[11px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Final Net Pay</span>
+                            <span className="text-xl md:text-3xl font-extrabold text-success">{formatCurrency(currentNetPay)}</span>
                         </div>
-                        <Button disabled={settling} onClick={handleSettle} className="w-full text-base h-12 shadow-sm">
-                            <Check className="h-5 w-5 mr-2" />
+                        <Button disabled={settling} onClick={handleSettle} className="w-full text-sm md:text-base h-10 md:h-12 shadow-sm">
+                            <Check className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                             Finalize & Issue Payslip
                         </Button>
                     </div>

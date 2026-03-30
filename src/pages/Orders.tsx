@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const formatCurrency = (v: number) => `₱${v.toLocaleString()}`;
 
@@ -48,6 +49,32 @@ export default function Orders() {
     message: string;
     onConfirm: () => void;
   }>({ open: false, title: "", message: "", onConfirm: () => {} });
+
+  const generateNextOrderNo = (baseDate: Date = new Date()) => {
+    const prefix = `ORD-${format(baseDate, "yyMM")}-`;
+    
+    const currentMonthOrders = orders
+        .filter(o => o.order_no && typeof o.order_no === 'string' && o.order_no.startsWith(prefix))
+        .map(o => {
+            const parts = o.order_no.split("-");
+            if (parts.length < 3) return 0;
+            const seq = parseInt(parts[2]);
+            return isNaN(seq) ? 0 : seq;
+        });
+
+    const nextSeq = currentMonthOrders.length > 0 ? Math.max(...currentMonthOrders) + 1 : 1;
+    return `${prefix}${nextSeq.toString().padStart(3, '0')}`;
+  };
+
+  // Sync Order Number with selected Order Date
+  useEffect(() => {
+    if (open && !editingOrder && newPayDate) {
+      const selectedDate = new Date(newPayDate);
+      if (!isNaN(selectedDate.getTime())) {
+        setOrderNumber(generateNextOrderNo(selectedDate));
+      }
+    }
+  }, [newPayDate, open, editingOrder, orders]);
 
   const fetchOrders = async () => {
     setIsLoading(true);
@@ -374,7 +401,14 @@ export default function Orders() {
   };
 
   const updateStatus = async (id: string, field: string, value: any, orderNo: string) => {
-      const { error } = await supabase.from('orders').update({ [field]: value }).eq('id', id);
+      const updateData: any = { [field]: value };
+      
+      // Auto-cleanup: If reverting from Delivered to Pending/Packed, clear delivered_on
+      if (field === 'order_status' && value !== 'Delivered') {
+          updateData.delivered_on = null;
+      }
+
+      const { error } = await supabase.from('orders').update(updateData).eq('id', id);
       if (error) {
           toast.error("Failed to update status");
       } else {
@@ -408,9 +442,19 @@ export default function Orders() {
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <PageHeader title="Orders">
         {role !== 'viewer' && (
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(val) => {
+            setOpen(val);
+            if (val && !editingOrder) {
+              setOrderNumber(generateNextOrderNo());
+            }
+          }}>
             <DialogTrigger asChild>
-              <Button className="touch-target"><Plus className="h-4 w-4 mr-2" />New Order</Button>
+              <Button className="touch-target" onClick={() => {
+                setEditingOrder(null);
+                setOrderNumber(generateNextOrderNo());
+              }}>
+                <Plus className="h-4 w-4 mr-2" />New Order
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg w-[95vw] md:w-full max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editingOrder ? `Edit Order ${editingOrder.order_no}` : "Create Order"}</DialogTitle></DialogHeader>
@@ -454,38 +498,58 @@ export default function Orders() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Order Date</label>
-                    <Input type="date" value={newPayDate} onChange={(e) => setNewPayDate(e.target.value)} className="h-9 text-xs" />
+                    <DatePicker 
+                        date={newPayDate} 
+                        onStringChange={setNewPayDate} 
+                        className="h-9 text-xs" 
+                    />
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Delivery Deadline</label>
-                    <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="h-9 text-xs" />
+                    <DatePicker 
+                        date={deadline} 
+                        onStringChange={setDeadline} 
+                        className="h-9 text-xs" 
+                    />
                   </div>
                 </div>
 
                 <div>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground mb-2 block">Order Items</label>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {items.map((item, idx) => (
-                      <div key={idx} className="flex gap-2 items-end bg-muted/20 p-2 rounded-md">
-                        <div className="flex-1">
-                          <Select value={item.productName} onValueChange={(v) => updateItem(idx, "productName", v as any)}>
-                            <SelectTrigger className="h-8 text-xs font-medium uppercase"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {PRODUCTS.map((p) => <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
+                      <div key={idx} className="relative bg-muted/20 p-3 rounded-lg border border-transparent hover:border-muted-foreground/20 transition-all">
+                        <div className="grid grid-cols-12 gap-3">
+                          <div className="col-span-12 md:col-span-6">
+                            <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block md:hidden">Product</label>
+                            <Select value={item.productName} onValueChange={(v) => updateItem(idx, "productName", v as any)}>
+                              <SelectTrigger className="h-9 text-xs font-medium bg-white/50"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                 {PRODUCTS.map((p) => <SelectItem key={p.name} value={p.name} textValue={p.name}>{p.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="col-span-5 md:col-span-2">
+                            <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block md:hidden">Qty</label>
+                            <div className="relative">
+                              <Input type="number" placeholder="0" value={item.quantity || ""} onChange={(e) => updateItem(idx, "quantity", Number(e.target.value))} className="h-9 text-xs pl-2 bg-white/50" min={1} />
+                            </div>
+                          </div>
+                          <div className="col-span-5 md:col-span-3">
+                            <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block md:hidden">Price</label>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">₱</span>
+                              <Input type="number" placeholder="0" value={item.pricePerPack || ""} onChange={(e) => updateItem(idx, "pricePerPack", Number(e.target.value))} className="h-9 text-xs pl-5 bg-white/50" min={0} />
+                            </div>
+                          </div>
+                          <div className="col-span-2 md:col-span-1 flex items-end justify-center">
+                            {items.length > 1 && (
+                              <Button variant="ghost" size="icon" onClick={() => removeItem(idx)} className="h-9 w-9 text-destructive hover:bg-destructive/10">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <div className="w-20">
-                          <Input type="number" placeholder="Qty" value={item.quantity || ""} onChange={(e) => updateItem(idx, "quantity", Number(e.target.value))} className="h-8 text-xs" min={1} />
-                        </div>
-                        <div className="w-24">
-                          <Input type="number" placeholder="Price" value={item.pricePerPack || ""} onChange={(e) => updateItem(idx, "pricePerPack", Number(e.target.value))} className="h-8 text-xs" min={0} />
-                        </div>
-                        {items.length > 1 && (
-                          <Button variant="ghost" size="icon" onClick={() => removeItem(idx)} className="h-8 w-8 text-destructive hover:bg-destructive/10">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -499,7 +563,7 @@ export default function Orders() {
                   <span className="text-lg font-bold text-primary">{formatCurrency(total)}</span>
                 </div>
 
-                <Button onClick={editingOrder ? handleUpdate : handleCreate} className="w-full h-10 font-bold uppercase tracking-wider">
+                <Button onClick={editingOrder ? handleUpdate : handleCreate} className="w-full h-10 md:h-12 font-bold uppercase tracking-wider text-sm mt-2">
                   {editingOrder ? "Save Changes" : "Create Order"}
                 </Button>
               </div>
@@ -618,32 +682,32 @@ export default function Orders() {
                       
                       <div className="mt-4 pt-4 border-t space-y-3">
                          <div>
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Global Order Status</label>
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Order Status</label>
                             <Select 
                               disabled={role === 'viewer'}
                               value={o.order_status} 
                               onValueChange={(v) => updateStatus(o.id, "order_status", v, o.order_no)}
                             >
-                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectTrigger className="h-8 text-xs font-medium"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="Pending">Pending</SelectItem>
-                                <SelectItem value="Packed">Packed</SelectItem>
-                                <SelectItem value="Delivered">Delivered</SelectItem>
+                                 <SelectItem value="Pending" className="text-xs">Pending</SelectItem>
+                                 <SelectItem value="Packed" className="text-xs">Packed</SelectItem>
+                                 <SelectItem value="Delivered" className="text-xs">Delivered</SelectItem>
                               </SelectContent>
                             </Select>
+                            {o.order_status === 'Delivered' && (
+                              <div className="animate-in slide-in-from-top-1 fade-in duration-300 bg-success/5 p-3 rounded-xl border border-success/20 mt-3">
+                                <label className="text-[10px] uppercase font-black text-success/80 mb-2 block tracking-widest">Delivered On Status</label>
+                                <DatePicker 
+                                  disabled={role === 'viewer'}
+                                  date={o.delivered_on || ""} 
+                                  onStringChange={(val) => updateStatus(o.id, "delivered_on", val, o.order_no)} 
+                                  className="h-10 bg-white border-success/30 font-bold text-success" 
+                                  placeholder="Select Delivery Date"
+                                />
+                              </div>
+                            )}
                          </div>
-                         {o.order_status === 'Delivered' && (
-                           <div className="animate-in fade-in">
-                             <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Delivered On</label>
-                             <Input 
-                               disabled={role === 'viewer'}
-                               type="date" 
-                               value={o.delivered_on || ""} 
-                               onChange={(e) => updateStatus(o.id, "delivered_on", e.target.value, o.order_no)} 
-                               className="h-8 text-xs" 
-                             />
-                           </div>
-                         )}
                       </div>
                     </div>
 
@@ -666,10 +730,9 @@ export default function Orders() {
                             <div className="grid grid-cols-2 gap-2">
                                <div className="col-span-1">
                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Date</label>
-                                <Input 
-                                   type="date" 
-                                   value={newPayDate} 
-                                   onChange={(e) => setNewPayDate(e.target.value)} 
+                                <DatePicker 
+                                   date={newPayDate} 
+                                   onStringChange={setNewPayDate} 
                                    className="h-8 text-[10px] px-2" 
                                 />
                                </div>

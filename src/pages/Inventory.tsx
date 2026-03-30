@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/StatCard";
 import { AlertTriangle, PackageOpen, Trash2, Edit2, RefreshCw, Puzzle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -493,27 +494,27 @@ export default function Inventory() {
 
             {/* Centralized Action Toolbar */}
             {role !== 'viewer' && (
-                <div className="flex justify-end mb-4">
-                    <div className="flex bg-muted/50 p-1 rounded-xl border shadow-sm w-full md:w-auto">
+                <div className="flex justify-end mb-4 px-1">
+                    <div className="flex items-center bg-muted/50 p-1 rounded-xl border shadow-sm w-fit">
                         <button 
-                            className={`flex flex-col md:flex-row items-center justify-center gap-1.5 px-4 py-2 text-[10px] md:text-xs font-bold uppercase rounded-lg transition-all ${showConverter && activeTool === 'pack' ? 'bg-white text-blue-600 shadow border border-border/50' : 'text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'}`}
+                            className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 md:py-2 text-[9px] md:text-xs font-bold uppercase rounded-lg transition-all ${showConverter && activeTool === 'pack' ? 'bg-white text-blue-600 shadow border border-border/50' : 'text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'}`}
                             onClick={() => {
                                 if (showConverter && activeTool === 'pack') setShowConverter(false);
                                 else { setShowConverter(true); setActiveTool('pack'); }
                             }}
                         >
-                            <PackageOpen size={16} />
-                            Pack Sticks
+                            <PackageOpen size={14} className="md:size-4" />
+                            <span className="md:inline">Pack Sticks</span>
                         </button>
                         <button 
-                            className={`flex flex-col md:flex-row items-center justify-center gap-1.5 px-4 py-2 text-[10px] md:text-xs font-bold uppercase rounded-lg transition-all ${showConverter && activeTool === 'repack' ? 'bg-white text-purple-600 shadow border border-border/50' : 'text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'}`}
+                            className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 md:py-2 text-[9px] md:text-xs font-bold uppercase rounded-lg transition-all ${showConverter && activeTool === 'repack' ? 'bg-white text-purple-600 shadow border border-border/50' : 'text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'}`}
                             onClick={() => {
                                 if (showConverter && activeTool === 'repack') setShowConverter(false);
                                 else { setShowConverter(true); setActiveTool('repack'); }
                             }}
                         >
-                            <RefreshCw size={14} className="md:size-4" />
-                            Repack Stock
+                            <RefreshCw size={12} className="md:size-4" />
+                            <span className="md:inline">Repack Stock</span>
                         </button>
                     </div>
                 </div>
@@ -547,25 +548,30 @@ export default function Inventory() {
                         <form onSubmit={handlePackaging} className="space-y-4">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 relative z-10">
                                 <div>
-                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
-                                    <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Date</label>
+                                    <DatePicker 
+                                        date={date} 
+                                        onStringChange={setDate} 
+                                        className="text-xs h-9 md:h-10" 
+                                    />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Target Product</label>
+                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Target Product</label>
                                     <Select value={packSize} onValueChange={setPackSize} required>
-                                        <SelectTrigger className="text-xs h-10 font-medium transition-all"><SelectValue placeholder="Pick Product" /></SelectTrigger>
+                                        <SelectTrigger className="text-[11px] md:text-xs h-9 md:h-10 font-medium transition-all group-hover:border-blue-400 bg-white/50"><SelectValue placeholder="Pick Product" /></SelectTrigger>
                                         <SelectContent>
                                             {PRODUCTS.map((p) => (
-                                                <SelectItem key={p.name} value={p.name} className="flex flex-col items-start py-2">
-                                                    <div className="text-xs">{p.name}</div>
-                                                    <div className="text-[9px] text-muted-foreground font-medium">{p.stickSize} Sticks • {p.multiplier === 0.5 ? 'Half Stick' : 'Whole Stick'}</div>
+                                                <SelectItem key={p.name} value={p.name} triggerText={p.name} className="py-2">
+                                                    <div className="text-[9px] text-muted-foreground font-medium mt-0.5">
+                                                        {p.stickSize} Sticks • {p.multiplier === 0.5 ? 'Half Stick' : 'Whole Stick'}
+                                                    </div>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div>
-                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Number of Packs</label>
+                                <div className="col-span-1">
+                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Quantity</label>
                                     <Input
                                         type="number"
                                         placeholder="0"
@@ -573,66 +579,76 @@ export default function Inventory() {
                                         onChange={(e) => setPacks(e.target.value)}
                                         min={1}
                                         required
+                                        className="text-[11px] md:text-sm h-9 md:h-10"
                                     />
                                 </div>
-                                <div className="flex items-end">
-                                    <Button disabled={saving || !packSize || !packs} type="submit" className="w-full text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md">
-                                        Finalize Conversion
+                                <div className="flex items-end col-span-2 md:col-span-1">
+                                    <Button disabled={saving || !packSize || !packs} type="submit" className="w-full text-xs md:text-sm font-semibold h-9 md:h-10 bg-blue-600 hover:bg-blue-700 text-white shadow-md">
+                                        Pack
                                     </Button>
                                 </div>
                             </div>
                             
                             {packSize && packs && (
-                                <div className="p-2 bg-blue-50/50 rounded border border-blue-100 flex items-center justify-between relative z-10">
-                                    <div className="flex flex-col">
-                                        <p className="text-[10px] text-blue-700 font-bold uppercase">
-                                            Needed: {PRODUCTS.find(p => p.name === packSize)?.size! * Number(packs) * PRODUCTS.find(p => p.name === packSize)?.multiplier!} {PRODUCTS.find(p => p.name === packSize)?.stickSize} Sticks
-                                        </p>
-                                        {PRODUCTS.find(p => p.name === packSize)?.multiplier === 0.5 && (
-                                            <p className="text-[8px] text-blue-600 font-medium italic">* Only half sticks are used for Barquillon</p>
-                                        )}
-                                    </div>
+                                <div className="p-2 bg-blue-50/10 rounded border border-blue-100 flex items-center justify-between relative z-10 mt-2">
+                                    <p className="text-[10px] text-blue-700 font-bold uppercase">
+                                        Needed: {PRODUCTS.find(p => p.name === packSize)?.size! * Number(packs) * PRODUCTS.find(p => p.name === packSize)?.multiplier!} {PRODUCTS.find(p => p.name === packSize)?.stickSize} Sticks
+                                    </p>
                                     <p className={`text-[10px] font-bold uppercase transition-colors ${(PRODUCTS.find(p => p.name === packSize)?.stickSize === 'Small' ? unpackedSmallSticks : unpackedRegularSticks) < (PRODUCTS.find(p => p.name === packSize)?.size! * Number(packs) * PRODUCTS.find(p => p.name === packSize)?.multiplier!) ? 'text-red-600' : 'text-blue-700'}`}>
-                                        {(PRODUCTS.find(p => p.name === packSize)?.stickSize === 'Small' ? unpackedSmallSticks : unpackedRegularSticks) < (PRODUCTS.find(p => p.name === packSize)?.size! * Number(packs) * PRODUCTS.find(p => p.name === packSize)?.multiplier!) 
-                                            ? 'Insufficient Stock' 
-                                            : `Remaining: ${(PRODUCTS.find(p => p.name === packSize)?.stickSize === 'Small' ? unpackedSmallSticks : unpackedRegularSticks) - (PRODUCTS.find(p => p.name === packSize)?.size! * Number(packs) * PRODUCTS.find(p => p.name === packSize)?.multiplier!)}`
-                                        }
+                                        Stock: {PRODUCTS.find(p => p.name === packSize)?.stickSize === 'Small' ? unpackedSmallSticks : unpackedRegularSticks}
                                     </p>
                                 </div>
                             )}
                         </form>
                     ) : (
                         <form onSubmit={handleRepack} className="space-y-4">
-                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 relative z-10">
-                                <div>
-                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Source Product</label>
+                             <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 relative z-10">
+                                <div className="col-span-1 lg:col-span-2">
+                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Source</label>
                                     <Select value={repackSourceSize} onValueChange={setRepackSourceSize} required>
-                                        <SelectTrigger className="text-xs"><SelectValue placeholder="From" /></SelectTrigger>
+                                        <SelectTrigger className="text-[11px] md:text-xs h-9 md:h-10"><SelectValue placeholder="From" /></SelectTrigger>
                                         <SelectContent>
-                                            {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map(p => <SelectItem key={p.name} value={p.name} className="flex flex-col items-start py-2">
-                                                <div className="text-xs">{p.name}</div>
-                                            </SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div>
-                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Target Product</label>
-                                    <Select value={repackTargetSize} onValueChange={setRepackTargetSize} required>
-                                        <SelectTrigger className="text-xs"><SelectValue placeholder="To" /></SelectTrigger>
-                                        <SelectContent>
-                                            {PRODUCTS.map(p => (
-                                                <SelectItem key={p.name} value={p.name} disabled={p.name === repackSourceSize || (repackSourceSize && p.stickSize !== PRODUCTS.find(sp => sp.name === repackSourceSize)?.stickSize)} className="flex flex-col items-start py-2">
-                                                    <div className="text-xs">{p.name}</div>
-                                                    {repackSourceSize && p.stickSize !== PRODUCTS.find(sp => sp.name === repackSourceSize)?.stickSize && (
-                                                        <div className="text-[9px] text-destructive font-medium mt-0.5">Incompatible Stick Size</div>
-                                                    )}
+                                            {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map(p => (
+                                                <SelectItem key={p.name} value={p.name} triggerText={p.name} className="flex flex-col items-start py-2">
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                <div className="col-span-1 lg:col-span-2">
+                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Target</label>
+                                    <Select value={repackTargetSize} onValueChange={setRepackTargetSize} required>
+                                        <SelectTrigger className="text-[11px] md:text-xs h-9 md:h-10"><SelectValue placeholder="To" /></SelectTrigger>
+                                        <SelectContent>
+                                            {(() => {
+                                                const sourceProduct = PRODUCTS.find(p => p.name === repackSourceSize);
+                                                return PRODUCTS.map(p => {
+                                                    const isCompatible = !sourceProduct || p.stickSize === sourceProduct.stickSize;
+                                                    const isSame = p.name === repackSourceSize;
+                                                    
+                                                    return (
+                                                        <SelectItem 
+                                                            key={p.name} 
+                                                            value={p.name} 
+                                                            triggerText={p.name} 
+                                                            disabled={!isCompatible || isSame}
+                                                            className="flex flex-col items-start py-2"
+                                                        >
+                                                            {!isCompatible && (
+                                                                <span className="text-[8px] text-destructive font-bold uppercase mb-0.5">Incompatible Stick Size</span>
+                                                            )}
+                                                            {isSame && (
+                                                                <span className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">Same as Source</span>
+                                                            )}
+                                                        </SelectItem>
+                                                    );
+                                                });
+                                            })()}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 <div>
-                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Target Quantity</label>
+                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Target Quantity</label>
                                     <Input
                                         type="number"
                                         placeholder="0"
@@ -640,6 +656,7 @@ export default function Inventory() {
                                         onChange={(e) => setRepackTargetQty(e.target.value)}
                                         min={1}
                                         required
+                                        className="text-[11px] md:text-sm h-9 md:h-10"
                                     />
                                 </div>
                                 <div className="flex items-end">
@@ -830,7 +847,11 @@ export default function Inventory() {
                     <div className="space-y-4 py-4">
                         <div>
                             <label className="text-xs text-muted-foreground uppercase mb-1 block">Date</label>
-                            <Input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="h-10" />
+                            <DatePicker 
+                                date={editDate} 
+                                onStringChange={setEditDate} 
+                                className="h-10" 
+                            />
                         </div>
 
                         {editType === 'PackSticks' ? (

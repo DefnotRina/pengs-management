@@ -31,7 +31,13 @@ export default function Clients() {
   const [pricingModalOpen, setPricingModalOpen] = useState(false);
   const [currentPricing, setCurrentPricing] = useState<any[]>([]);
   const [newPrices, setNewPrices] = useState<Record<string, string>>({});
-
+  // Confirmation State
+  const [confirmConfig, setConfirmConfig] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ open: false, title: "", message: "", onConfirm: () => {} });
   const fetchData = async () => {
     setIsLoading(true);
     const { data, error } = await supabase
@@ -141,15 +147,21 @@ export default function Clients() {
     setPricingModalOpen(false);
   };
 
-  const handleDeleteClient = async (id: string) => {
-    if (!window.confirm("Are you sure? This will also remove their custom pricing history.")) return;
-    
-    const { error } = await supabase.from('clients').delete().eq('id', id);
-    if (error) toast.error(`Failed to delete client: ${error.message}`);
-    else {
-      toast.success("Client deleted");
-      fetchData();
-    }
+  const handleDeleteClient = async (id: string, name: string) => {
+    setConfirmConfig({
+        open: true,
+        title: "Delete Client?",
+        message: `Are you sure you want to delete ${name}? This will permanently remove their profile and all custom pricing history associated with them.`,
+        onConfirm: async () => {
+            setConfirmConfig(prev => ({ ...prev, open: false }));
+            const { error } = await supabase.from('clients').delete().eq('id', id);
+            if (error) toast.error(`Failed to delete client: ${error.message}`);
+            else {
+                toast.success("Client deleted");
+                fetchData();
+            }
+        }
+    });
   };
 
   const filteredClients = clients.filter(c => 
@@ -176,7 +188,7 @@ export default function Clients() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input 
           placeholder="Search by client name or contact person..." 
-          className="pl-10 h-10 shadow-sm bg-card" 
+          className="pl-10 text-xs h-9 md:h-10 shadow-sm bg-card" 
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
         />
@@ -206,10 +218,13 @@ export default function Clients() {
                     <Pencil className="h-4 w-4" />
                   </Button>
                 )}
-                {isEditMode && role === 'admin' && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteClient(client.id)}>
+                 {isEditMode && role === 'admin' && (
+                  <button 
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-destructive hover:bg-destructive/10 transition-colors" 
+                    onClick={() => handleDeleteClient(client.id, client.name)}
+                  >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </button>
                 )}
               </div>
             </div>
@@ -242,28 +257,28 @@ export default function Clients() {
 
       {/* Add/Edit Client Dialog */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>{editingClient ? "Edit Client" : "Add New Client"}</DialogTitle>
+        <DialogContent className="max-w-md w-[95vw] p-0 overflow-hidden">
+          <DialogHeader className="p-4 md:p-6 border-b bg-muted/20">
+            <DialogTitle className="text-base md:text-xl font-bold">{editingClient ? "Edit Client" : "Add New Client"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSaveClient} className="space-y-4 pt-2">
+          <form onSubmit={handleSaveClient} className="p-4 md:p-6 space-y-3 md:space-y-4">
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Client/Store Name</label>
-              <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Sari-Sari Store" required />
+              <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Client/Store Name</label>
+              <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Sari-Sari Store" className="text-xs md:text-sm h-9 md:h-10 touch-target" required />
             </div>
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Contact Person</label>
-              <Input value={formData.contact_person} onChange={e => setFormData({...formData, contact_person: e.target.value})} placeholder="e.g. Aling Nena" />
+              <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Contact Person</label>
+              <Input value={formData.contact_person} onChange={e => setFormData({...formData, contact_person: e.target.value})} placeholder="e.g. Aling Nena" className="text-xs md:text-sm h-9 md:h-10 touch-target" />
             </div>
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Contact Number</label>
-              <Input value={formData.contact_number} onChange={e => setFormData({...formData, contact_number: e.target.value})} placeholder="09XX XXX XXXX" />
+              <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Contact Number</label>
+              <Input value={formData.contact_number} onChange={e => setFormData({...formData, contact_number: e.target.value})} placeholder="09XX XXX XXXX" className="text-xs md:text-sm h-9 md:h-10 touch-target" />
             </div>
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Address</label>
-              <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Full delivery address" />
+              <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Address</label>
+              <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Full delivery address" className="text-xs md:text-sm h-9 md:h-10 touch-target" />
             </div>
-            <Button type="submit" className="w-full h-11 font-bold">
+            <Button type="submit" className="w-full h-10 md:h-11 font-bold text-sm mt-2">
               {editingClient ? "Update Profile" : "Create Profile"}
             </Button>
           </form>
@@ -272,62 +287,94 @@ export default function Clients() {
 
       {/* Pricing Manager Dialog */}
       <Dialog open={pricingModalOpen} onOpenChange={setPricingModalOpen}>
-        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex justify-between items-center pr-6">
-                <span>Custom Pricing: {editingClient?.name}</span>
-                <span className="text-[10px] font-normal text-muted-foreground">Standard Base Price is applied if left blank</span>
+        <DialogContent className="max-w-md w-[95vw] h-[85vh] md:h-auto md:max-h-[90vh] p-0 flex flex-col overflow-hidden">
+          <DialogHeader className="p-6 md:pt-9 md:pb-9 md:pl-8 md:pr-32 border-b bg-card shrink-0">
+            <DialogTitle className="flex flex-col items-center md:items-start text-center md:text-left gap-1 pr-0">
+                <span className="text-lg md:text-xl font-bold">Custom Pricing: {editingClient?.name}</span>
+                <span className="text-[10px] md:text-[11px] font-normal text-muted-foreground leading-tight md:mt-1">Standard Base Price is applied if left blank</span>
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-3 mt-4">
-             <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                <div className="col-span-8">Product Name</div>
-                <div className="col-span-4 text-right">Custom Price (₱)</div>
-             </div>
-             
-             {PRODUCTS.map(product => {
-                const isCustom = newPrices[product.name] !== undefined && newPrices[product.name] !== "";
-                return (
-                  <div key={product.name} className={`grid grid-cols-12 gap-3 items-center p-2 rounded-lg border transition-colors ${isCustom ? 'bg-primary/5 border-primary/20' : 'bg-muted/10 border-transparent opacity-80'}`}>
-                    <div className="col-span-8">
-                       <p className="text-sm font-bold text-foreground">{product.name}</p>
-                       <p className="text-[10px] text-muted-foreground italic">Base Price: {formatCurrency(product.basePrice)}</p>
+          <div className="flex-1 overflow-y-auto p-4 pt-2 md:pl-6 md:pr-6 md:pb-6 md:pt-2">
+            <div className="space-y-3">
+               <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                  <div className="col-span-8">Product Name</div>
+                  <div className="col-span-4 text-right">Custom Price (₱)</div>
+               </div>
+               
+               {PRODUCTS.map(product => {
+                  const isCustom = newPrices[product.name] !== undefined && newPrices[product.name] !== "";
+                  return (
+                    <div key={product.name} className={`grid grid-cols-12 gap-3 items-center p-2 rounded-lg border transition-colors ${isCustom ? 'bg-primary/5 border-primary/20' : 'bg-muted/10 border-transparent opacity-80'}`}>
+                      <div className="col-span-8">
+                         <p className="text-sm font-bold text-foreground">{product.name}</p>
+                         <p className="text-[10px] text-muted-foreground italic">Base Price: {formatCurrency(product.basePrice)}</p>
+                      </div>
+                      <div className="col-span-4 flex items-center gap-2">
+                         <div className="relative flex-1">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">₱</span>
+                            <Input 
+                              type="number"
+                              step="any"
+                              placeholder={String(product.basePrice)}
+                              value={newPrices[product.name] || ""}
+                              onChange={e => setNewPrices({...newPrices, [product.name]: e.target.value})}
+                              className="h-9 pl-5 text-right font-bold text-xs"
+                            />
+                         </div>
+                         {isCustom && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => {
+                               const updated = {...newPrices};
+                               delete updated[product.name];
+                               setNewPrices(updated);
+                            }}>
+                               <X className="h-4 w-4" />
+                            </Button>
+                         )}
+                      </div>
                     </div>
-                    <div className="col-span-4 flex items-center gap-2">
-                       <div className="relative flex-1">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">₱</span>
-                          <Input 
-                            type="number"
-                            step="any"
-                            placeholder={String(product.basePrice)}
-                            value={newPrices[product.name] || ""}
-                            onChange={e => setNewPrices({...newPrices, [product.name]: e.target.value})}
-                            className="h-9 pl-5 text-right font-bold text-xs"
-                          />
-                       </div>
-                       {isCustom && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => {
-                             const updated = {...newPrices};
-                             delete updated[product.name];
-                             setNewPrices(updated);
-                          }}>
-                             <X className="h-4 w-4" />
-                          </Button>
-                       )}
-                    </div>
-                  </div>
-                );
-             })}
+                  );
+               })}
+            </div>
           </div>
 
-          <div className="sticky bottom-0 bg-background pt-6 pb-2 border-t mt-6 flex gap-3">
+          <div className="p-4 md:p-6 bg-background pt-4 pb-4 border-t shrink-0 flex gap-3">
              <Button variant="outline" className="flex-1" onClick={() => setPricingModalOpen(false)}>Cancel</Button>
              <Button className="flex-1 gap-2 font-bold" onClick={handleSavePrices}>
                 <Save className="h-4 w-4" /> Save Prices
              </Button>
           </div>
         </DialogContent>
+      </Dialog>
+      {/* Custom Safety Confirmation Modal */}
+      <Dialog open={confirmConfig.open} onOpenChange={(open) => setConfirmConfig(prev => ({ ...prev, open }))}>
+          <DialogContent className="sm:max-w-[380px] p-0 overflow-hidden border-none shadow-2xl rounded-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-destructive/10 p-6 flex flex-col items-center text-center space-y-3">
+                  <div className="bg-white p-3 rounded-full shadow-sm border border-destructive/10">
+                      <Trash2 className="h-6 w-6 text-destructive" />
+                  </div>
+                  <h3 className="text-lg font-black text-destructive uppercase tracking-tight">{confirmConfig.title}</h3>
+                  <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+                      {confirmConfig.message}
+                  </p>
+              </div>
+              <div className="p-4 bg-white flex gap-3">
+                  <Button 
+                      variant="outline" 
+                      className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-muted transition-colors border-muted-foreground/20"
+                      onClick={() => setConfirmConfig(prev => ({ ...prev, open: false }))}
+                  >
+                      Cancel
+                  </Button>
+                  <Button 
+                      variant="destructive" 
+                      className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-destructive/20 active:scale-95 transition-all"
+                      onClick={confirmConfig.onConfirm}
+                  >
+                      Delete
+                  </Button>
+              </div>
+          </DialogContent>
       </Dialog>
     </div>
   );

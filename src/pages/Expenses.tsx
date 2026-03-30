@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/StatCard";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,8 +14,8 @@ import { useAuth } from "@/contexts/AuthContext";
 const RAW_INGREDIENTS = [
     { name: "Flour", unit: "Sack" },
     { name: "Sugar", unit: "Sack" },
-    { name: "Skim Milk", unit: "Bag" },
-    { name: "Butter Milk", unit: "Bag" },
+    { name: "Skim Milk", unit: "kg" },
+    { name: "Butter Milk", unit: "kg" },
     { name: "Eggs", unit: "Tray" },
     { name: "Margarine", unit: "Select" },
 ];
@@ -206,14 +207,18 @@ export default function Expenses() {
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                             <div>
                                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Date</label>
-                                                <Input type="date" value={entry.date} onChange={(e) => updateEntry(idx, "date", e.target.value)} className="h-8 text-xs" required />
+                                            <DatePicker 
+                                                date={entry.date} 
+                                                onStringChange={(val) => updateEntry(idx, "date", val)} 
+                                                className="h-8 text-xs" 
+                                            />
                                             </div>
                                             <div>
                                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Category</label>
                                                 <Select value={entry.category} onValueChange={(v) => updateEntry(idx, "category", v)} required>
                                                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
-                                                        {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                                        {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs pl-3">{c}</SelectItem>)}
                                                     </SelectContent>
                                                 </Select>
                                             </div>
@@ -221,9 +226,9 @@ export default function Expenses() {
                                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Item</label>
                                                 {entry.category === "Raw Ingredients" ? (
                                                     <Select value={entry.item} onValueChange={(v) => updateEntry(idx, "item", v)} required>
-                                                        <SelectTrigger className="h-8 text-xs font-semibold"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
+                                                        <SelectTrigger className="h-8 text-xs font-medium"><SelectValue placeholder="Select Ingredient" /></SelectTrigger>
                                                         <SelectContent>
-                                                            {RAW_INGREDIENTS.map((ri) => <SelectItem key={ri.name} value={ri.name}>{ri.name}</SelectItem>)}
+                                                            {RAW_INGREDIENTS.map((ri) => <SelectItem key={ri.name} value={ri.name} className="text-xs pl-3">{ri.name}</SelectItem>)}
                                                         </SelectContent>
                                                     </Select>
                                                 ) : (
@@ -241,10 +246,10 @@ export default function Expenses() {
                                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Unit</label>
                                                 {entry.item === "Margarine" ? (
                                                     <Select value={entry.unit} onValueChange={(v) => updateEntry(idx, "unit", v)}>
-                                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                                        <SelectTrigger className="h-8 text-xs font-medium"><SelectValue /></SelectTrigger>
                                                         <SelectContent>
-                                                            <SelectItem value="Small Tub">Small Tub</SelectItem>
-                                                            <SelectItem value="Big Tub">Big Tub</SelectItem>
+                                                            <SelectItem value="Small Tub" className="text-xs pl-3">Small Tub</SelectItem>
+                                                            <SelectItem value="Big Tub" className="text-xs pl-3">Big Tub</SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 ) : (
@@ -397,34 +402,37 @@ export default function Expenses() {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
-                                    <Input type="date" value={editData.date} onChange={e => setEditData({...editData, date: e.target.value})} required />
+                                    <DatePicker 
+                                        date={editData.date} 
+                                        onStringChange={(val) => setEditData({...editData, date: val})} 
+                                    />
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label>
-                                    <Select value={editData.category} onValueChange={v => setEditData({...editData, category: v})}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <Select value={editData.category} onValueChange={(v) => setEditData({...editData, category: v})}>
+                                        <SelectTrigger className="h-10 text-xs shadow-sm font-medium"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                            {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c} className="text-xs pl-3">{c}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
                             </div>
                             <div>
                                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Item</label>
-                                <Input value={editData.item} onChange={e => setEditData({...editData, item: e.target.value})} required />
+                                <Input value={editData.item} onChange={e => setEditData({...editData, item: e.target.value})} className="h-10 text-xs" required />
                             </div>
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Qty</label>
-                                    <Input type="number" step="any" value={editData.qty} onChange={e => setEditData({...editData, qty: e.target.value})} />
+                                    <Input type="number" step="any" value={editData.qty} onChange={e => setEditData({...editData, qty: e.target.value})} className="h-10 text-xs" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Unit</label>
-                                    <Input value={editData.unit} onChange={e => setEditData({...editData, unit: e.target.value})} />
+                                    <Input value={editData.unit} onChange={e => setEditData({...editData, unit: e.target.value})} className="h-10 text-xs" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount</label>
-                                    <Input type="number" step="any" value={editData.amount} onChange={e => setEditData({...editData, amount: e.target.value})} required />
+                                    <Input type="number" step="any" value={editData.amount} onChange={e => setEditData({...editData, amount: e.target.value})} className="h-10 text-xs" required />
                                 </div>
                             </div>
                             <Button disabled={saving} type="submit" className="w-full h-10">

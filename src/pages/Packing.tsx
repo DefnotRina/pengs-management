@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,43 +205,47 @@ export default function Packing() {
                     setPackSize("11");
                 }
             }}>
-                <SelectTrigger className="w-[180px] h-8 text-[10px] uppercase tracking-wider">
+                <SelectTrigger className="w-[180px] h-9 md:h-10 text-xs shadow-sm">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Packed">Packed</SelectItem>
-                  <SelectItem value="Unpacked">Unpacked (By 11)</SelectItem>
+                  <SelectItem value="Packed" className="text-xs pl-3">Packed</SelectItem>
+                  <SelectItem value="Unpacked" className="text-xs pl-3">Unpacked (By 11)</SelectItem>
                 </SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="touch-target" required />
+              <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Date</label>
+              <DatePicker 
+                  date={date} 
+                  onStringChange={setDate} 
+                  className="text-xs h-9 md:h-10" 
+              />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Cook</label>
+              <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Cook</label>
               <Select value={cook} onValueChange={setCook} required>
-                <SelectTrigger className="touch-target"><SelectValue placeholder="Select cook" /></SelectTrigger>
+                <SelectTrigger className="text-xs h-9 md:h-10 touch-target"><SelectValue placeholder="Select cook" /></SelectTrigger>
                 <SelectContent>
                   {employees.filter(c => c.role?.toLowerCase().includes("cook")).length > 0 ? employees.filter(c => c.role?.toLowerCase().includes("cook")).map((c) => (
-                      <SelectItem key={c.id} value={c.names}>
+                      <SelectItem key={c.id} value={c.names} className="text-xs pl-3">
                           {c.names}
                       </SelectItem>
                   )) : (
-                      <SelectItem value="none" disabled>No cooks found</SelectItem>
+                      <SelectItem value="none" className="text-xs" disabled>No cooks found</SelectItem>
                   )}
                 </SelectContent>
               </Select>
             </div>
             {productionType === "Packed" && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Product</label>
+                <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Product</label>
                 <Select value={packSize} onValueChange={setPackSize} required>
-                  <SelectTrigger className="touch-target text-xs transition-all"><SelectValue placeholder="Pick Product" /></SelectTrigger>
+                  <SelectTrigger className="text-xs h-9 md:h-10 touch-target transition-all"><SelectValue placeholder="Pick Product" /></SelectTrigger>
                   <SelectContent>
                     {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map((p) => (
-                      <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>
+                      <SelectItem key={p.name} value={p.name} className="text-xs pl-3">{p.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -253,14 +258,14 @@ export default function Packing() {
                   <SelectTrigger className="touch-target text-xs transition-all"><SelectValue placeholder="Size" /></SelectTrigger>
                   <SelectContent>
                     {STICK_SIZES.map((s) => (
-                      <SelectItem key={s} value={s} className="text-xs uppercase">{s}</SelectItem>
+                      <SelectItem key={s} value={s} className="text-xs pl-3">{s}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             )}
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">
                 {productionType === "Unpacked" ? "Qty (By 11)" : "Packs Produced"}
               </label>
               <Input
@@ -268,7 +273,7 @@ export default function Packing() {
                 placeholder="0"
                 value={packs}
                 onChange={(e) => setPacks(e.target.value)}
-                className="touch-target"
+                className="text-xs h-9 md:h-10 touch-target"
                 min={1}
                 ref={packsInputRef}
                 required
@@ -282,7 +287,7 @@ export default function Packing() {
                   placeholder="0"
                   value={leftoverSticks}
                   onChange={(e) => setLeftoverSticks(e.target.value)}
-                  className="touch-target"
+                  className="text-xs h-9 md:h-10 touch-target"
                   min={0}
                   max={10}
                 />
@@ -351,13 +356,13 @@ export default function Packing() {
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-sm font-bold text-foreground">
+                                <p className="text-sm font-normal md:font-bold text-foreground">
                                     {e.production_type === 'Unpacked' 
                                         ? `${e.packs_produced} units ${e.leftover_sticks > 0 ? `+ ${e.leftover_sticks}` : ''}`
                                         : `${e.packs_produced} packs`
                                     }
                                 </p>
-                                <p className="text-xs text-muted-foreground text-[10px] uppercase font-bold tracking-tight">
+                                <p className="text-[10px] text-muted-foreground uppercase font-normal md:font-bold tracking-tight">
                                     {e.production_type === 'Unpacked'
                                         ? `${(e.packs_produced || 0) * 11 + (e.leftover_sticks || 0)} total sticks`
                                         : `${(e.pack_size || 0) * (e.packs_produced || 0)} total pieces`
@@ -453,25 +458,28 @@ export default function Packing() {
                         setEditType(v);
                         if (v === "Unpacked") setEditSize("11");
                     }}>
-                        <SelectTrigger className="w-[180px] h-8 text-[10px] uppercase font-bold"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-[180px] h-9 text-xs shadow-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="Packed">Packed</SelectItem>
-                            <SelectItem value="Unpacked">Unpacked (By 11)</SelectItem>
+                            <SelectItem value="Packed" className="text-xs pl-3">Packed</SelectItem>
+                            <SelectItem value="Unpacked" className="text-xs pl-3">Unpacked (By 11)</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
-                        <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+                        <DatePicker 
+                            date={editDate} 
+                            onStringChange={setEditDate} 
+                        />
                     </div>
                     <div>
                         <label className="text-xs font-medium text-muted-foreground mb-1 block">Cook</label>
                         <Select value={editCook} onValueChange={setEditCook}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-10 text-xs"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 {employees.filter(c => c.role?.toLowerCase().includes("cook")).map((c) => (
-                                    <SelectItem key={c.id} value={c.names}>{c.names}</SelectItem>
+                                    <SelectItem key={c.id} value={c.names} className="text-xs pl-3">{c.names}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
@@ -482,9 +490,9 @@ export default function Packing() {
                         <div>
                             <label className="text-xs font-medium text-muted-foreground mb-1 block">Product</label>
                             <Select value={editSize} onValueChange={setEditSize}>
-                                <SelectTrigger className="text-xs uppercase"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="h-10 text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map((p) => <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>)}
+                                    {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map((p) => <SelectItem key={p.name} value={p.name} className="text-xs pl-3">{p.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -493,9 +501,9 @@ export default function Packing() {
                         <div>
                             <label className="text-xs font-medium text-muted-foreground mb-1 block">Stick Size</label>
                             <Select value={editStickSize} onValueChange={setEditStickSize}>
-                                <SelectTrigger className="text-xs uppercase"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="h-10 text-xs shadow-sm"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {STICK_SIZES.map((s) => <SelectItem key={s} value={s} className="text-xs uppercase">{s}</SelectItem>)}
+                                    {STICK_SIZES.map((s) => <SelectItem key={s} value={s} className="text-xs pl-3">{s}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -504,12 +512,12 @@ export default function Packing() {
                         <label className="text-xs font-medium text-muted-foreground mb-1 block">
                             {editType === "Unpacked" ? "Qty (By 11)" : "Packs Produced"}
                         </label>
-                        <Input type="number" value={editPacks} onChange={(e) => setEditPacks(e.target.value)} min={1} />
+                        <Input type="number" value={editPacks} onChange={(e) => setEditPacks(e.target.value)} className="h-10 text-xs" min={1} />
                     </div>
                     {editType === "Unpacked" && (
                          <div>
                             <label className="text-xs font-medium text-muted-foreground mb-1 block">Leftover Sticks</label>
-                            <Input type="number" value={editLeftover} onChange={(e) => setEditLeftover(e.target.value)} min={0} max={10} />
+                            <Input type="number" value={editLeftover} onChange={(e) => setEditLeftover(e.target.value)} className="h-10 text-xs" min={0} max={10} />
                         </div>
                     )}
                 </div>

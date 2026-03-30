@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useAuth } from "@/contexts/AuthContext";
 
 const formatCurrency = (v: number) => `₱${(Number(v) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -176,7 +177,7 @@ export default function Employees() {
       <div className="bg-card rounded-lg border p-4 shadow-sm flex items-center justify-between gap-4">
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Cook Piece Rate</p>
-          <p className="text-sm text-muted-foreground">Applied to all Pay-Per-Output cooks: (total pieces / 11) × rate</p>
+          <p className="text-[10px] md:text-xs text-muted-foreground leading-tight">Applied to all Pay-Per-Output cooks: (total pieces / 11) × rate</p>
         </div>
         {editingRate ? (
           <div className="flex items-center gap-2">
@@ -187,9 +188,11 @@ export default function Employees() {
         ) : (
           <div className="flex items-center gap-3">
             <span className="text-2xl font-extrabold text-primary">₱{pieceRate}</span>
-            <Button variant="outline" size="sm" className="h-8 touch-target font-bold" disabled={role !== 'admin'} onClick={() => { if(role === 'admin') { setTempRate(String(pieceRate)); setEditingRate(true); } }}>
-              <Pencil className="h-3 w-3 mr-1" /> Edit
-            </Button>
+            {isEditMode && role === 'admin' && (
+              <Button variant="outline" size="sm" className="h-8 touch-target font-bold" onClick={() => { setTempRate(String(pieceRate)); setEditingRate(true); }}>
+                <Pencil className="h-3 w-3 mr-1" /> Edit
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -201,19 +204,19 @@ export default function Employees() {
             <DialogTitle>Add New Employee</DialogTitle>
             <DialogDescription className="sr-only">Create a new staff profile</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleAddEmployee} className="space-y-4">
+          <form onSubmit={handleAddEmployee} className="space-y-3 pt-2">
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Full Name</label>
-              <Input value={names} onChange={e => setNames(e.target.value)} placeholder="e.g. Maria" className="touch-target" required />
+              <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Full Name</label>
+              <Input value={names} onChange={e => setNames(e.target.value)} placeholder="e.g. Maria" className="text-xs md:text-sm h-9 md:h-10 touch-target" required />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Role</label>
-              <Input value={empRole} onChange={e => setEmpRole(e.target.value)} placeholder="e.g. Cook, Packer" className="touch-target" required />
+              <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Role</label>
+              <Input value={empRole} onChange={e => setEmpRole(e.target.value)} placeholder="e.g. Cook, Packer" className="text-xs md:text-sm h-9 md:h-10 touch-target" required />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Pay Structure</label>
+              <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Pay Structure</label>
               <Select value={payType} onValueChange={setPayType}>
-                <SelectTrigger className="touch-target"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="text-xs md:text-sm h-9 md:h-10 touch-target"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pay per output">Pay Per Output (Cooks)</SelectItem>
                   <SelectItem value="fixed (monthly)">Fixed - Per Month</SelectItem>
@@ -222,12 +225,12 @@ export default function Employees() {
             </div>
             {payType !== 'pay per output' && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Base Salary (₱)</label>
-                <Input type="number" min="0" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} placeholder="e.g. 15000" className="touch-target" required />
+                <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Base Salary (₱)</label>
+                <Input type="number" min="0" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} placeholder="e.g. 15000" className="text-xs md:text-sm h-9 md:h-10 touch-target" required />
               </div>
             )}
-            <Button disabled={saving} type="submit" className="w-full touch-target text-sm font-semibold">
-              {saving ? "Saving..." : "Create Employee"}
+            <Button disabled={saving} type="submit" className="w-full text-xs md:text-sm font-semibold h-9 md:h-10 touch-target bg-orange-500 hover:bg-orange-600 text-white mt-2">
+              {saving ? "Creating..." : "Create Employee Profile"}
             </Button>
           </form>
         </DialogContent>
@@ -242,19 +245,25 @@ export default function Employees() {
           </DialogHeader>
           <form onSubmit={handleIssueAdvance} className="space-y-4">
             <div className="bg-muted/30 p-3 rounded-md border text-sm"><strong>Employee:</strong> {selectedEmp}</div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Date Given</label>
-              <Input type="date" value={caDate} onChange={e => setCaDate(e.target.value)} required className="touch-target" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Date Given</label>
+                <DatePicker 
+                    date={caDate} 
+                    onStringChange={setCaDate} 
+                    className="text-xs h-9 md:h-10" 
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount (₱)</label>
+                <Input type="number" min="1" step="any" value={caAmount} onChange={e => setCaAmount(e.target.value)} placeholder="e.g. 500" required className="text-xs h-9 md:h-10 touch-target" />
+              </div>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Type / Note</label>
-              <Input value={caNote} onChange={e => setCaNote(e.target.value)} placeholder="e.g. Rice, Medical" className="touch-target" />
+              <Input value={caNote} onChange={e => setCaNote(e.target.value)} placeholder="e.g. Rice, Medical" className="text-xs h-9 md:h-10 touch-target" required />
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount (₱)</label>
-              <Input type="number" min="1" step="any" value={caAmount} onChange={e => setCaAmount(e.target.value)} placeholder="e.g. 500" required className="touch-target" />
-            </div>
-            <Button disabled={saving} type="submit" className="w-full touch-target">
+            <Button disabled={saving} type="submit" className="w-full h-10 font-bold bg-orange-500 hover:bg-orange-600 text-white touch-target shadow-sm">
                 {editingCaId ? "Update Advance" : "Record Advance"}
             </Button>
           </form>
@@ -277,52 +286,68 @@ export default function Employees() {
               const isEditingThis = editingEmpId === emp.id;
               const isFixed = !emp.pay_type?.toLowerCase().includes('output');
               return (
-                <div key={emp.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="h-10 w-10 min-w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                      <User className="h-5 w-5" />
+                <div key={emp.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 hover:bg-muted/5 transition-all">
+                  {/* Employee Identity and Mobile Balance */}
+                  <div className="flex items-start justify-between w-full md:w-auto md:flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 min-w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <p className="text-sm font-semibold text-foreground leading-tight">{emp.names}</p>
+                          <span className="text-[10px] font-medium bg-muted px-2 py-0.5 rounded capitalize text-muted-foreground">
+                            {emp.pay_type}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {emp.role}
+                          {isFixed && emp.base_salary ? ` · ₱${emp.base_salary.toLocaleString()}` : ""}
+                          {!isFixed ? ` · ₱${pieceRate}/unit` : ""}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-foreground flex items-center gap-2 flex-wrap">
-                        {emp.names}
-                        <span className="text-[10px] font-medium bg-muted px-2 py-0.5 rounded capitalize text-muted-foreground">{emp.pay_type}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {emp.role}
-                        {isFixed && emp.base_salary ? ` · Salary: ${formatCurrency(emp.base_salary)}` : ""}
-                        {!isFixed ? ` · Rate: ₱${pieceRate}/unit` : ""}
+                    
+                    {/* Mobile Only: Balance (positioned top right of card header) */}
+                    <div className="md:hidden text-right">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">C.A. Balance</p>
+                      <p className={`text-sm font-bold ${bal > 0 ? "text-destructive" : "text-success"}`}>
+                        {bal > 0 ? formatCurrency(bal) : "₱0"}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-end gap-3 border-t md:border-0 pt-3 md:pt-0">
-                    {/* Inline Salary Editor (fixed employees only) */}
-                    {isFixed && (
-                      isEditingThis ? (
-                        <div className="flex items-center gap-2">
-                          <Input type="number" min="0" value={editSalary} onChange={e => setEditSalary(e.target.value)} className="w-28 h-8 touch-target text-right font-bold" />
-                          <Button size="icon" className="h-8 w-8" onClick={() => handleSaveSalary(emp)} disabled={saving}><Check className="h-3.5 w-3.5" /></Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingEmpId(null)}><X className="h-3.5 w-3.5" /></Button>
-                        </div>
-                      ) : (
-                        <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" disabled={role !== 'admin' || !isEditMode} onClick={() => { if(role === 'admin' && isEditMode) { setEditingEmpId(emp.id); setEditSalary(String(emp.base_salary || "")); } }}>
-                          <Pencil className="h-3 w-3 mr-1" /> Edit Salary
-                        </Button>
-                      )
-                    )}
+                  {/* Desktop Info & Actions */}
+                  <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto border-t border-muted-foreground/10 md:border-0 pt-2.5 md:pt-0">
+                    <div className="flex items-center gap-3">
+                      {/* Inline Salary Editor (fixed employees only) */}
+                      {isFixed && isEditMode && role === 'admin' && (
+                        isEditingThis ? (
+                          <div className="flex items-center gap-1.5 bg-muted/30 p-1 rounded-md">
+                            <Input type="number" min="0" value={editSalary} onChange={e => setEditSalary(e.target.value)} className="w-20 h-7 text-[10px] touch-target text-right font-bold px-1.5" />
+                            <Button size="icon" className="h-7 w-7" onClick={() => handleSaveSalary(emp)} disabled={saving}><Check className="h-3.5 w-3.5" /></Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingEmpId(null)}><X className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        ) : (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs font-medium text-muted-foreground hover:text-primary" onClick={() => { setEditingEmpId(emp.id); setEditSalary(String(emp.base_salary || "")); }}>
+                            <Pencil className="h-3 w-3 mr-1" /> Edit Salary
+                          </Button>
+                        )
+                      )}
 
-                    {/* CA Balance */}
-                    <div className="text-right">
-                      <p className="text-[10px] text-muted-foreground mb-0.5">C.A. Pending</p>
-                      <p className={`text-sm font-bold ${bal > 0 ? "text-destructive" : "text-success"}`}>
-                        {bal > 0 ? formatCurrency(bal) : "₱0.00"}
-                      </p>
+                      {/* Desktop Only CA Balance */}
+                      <div className="hidden md:block text-right border-r border-border pr-3 mr-1">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">C.A. Balance</p>
+                        <p className={`text-sm font-bold ${bal > 0 ? "text-destructive" : "text-success"}`}>
+                          {bal > 0 ? formatCurrency(bal) : "₱0.00"}
+                        </p>
+                      </div>
                     </div>
 
                     {role === 'admin' && (
-                      <Button variant="outline" size="sm" className="touch-target h-9"
+                      <Button variant="outline" size="sm" className="touch-target h-8 px-3 text-xs font-medium border-primary/20 hover:bg-primary/5 shadow-sm"
                         onClick={() => { setSelectedEmp(emp.names); setCaAmount(""); setCaNote(""); setCaDate(new Date().toISOString().split("T")[0]); setEditingCaId(null); setCaModalOpen(true); }}>
-                        <Banknote className="h-4 w-4 mr-2 text-primary" /> Advance
+                        <Banknote className="h-3.5 w-3.5 mr-1.5 text-primary" /> Advance
                       </Button>
                     )}
                   </div>

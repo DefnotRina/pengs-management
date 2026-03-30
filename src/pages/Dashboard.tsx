@@ -8,9 +8,14 @@ import { Input } from "@/components/ui/input";
 import { 
     startOfToday, endOfToday, startOfWeek, endOfWeek, 
     startOfMonth, endOfMonth, subMonths, startOfYear, 
-    isWithinInterval, parseISO, format 
+    isWithinInterval, parseISO, format, parse
 } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const formatCurrency = (v: number) => `₱${Math.abs(v).toLocaleString()}`;
 
@@ -25,8 +30,8 @@ export default function Dashboard() {
     const [recentOrders, setRecentOrders] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [filterType, setFilterType] = useState("This Month");
-    const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"));
-    const [customEnd, setCustomEnd] = useState(format(new Date(), "yyyy-MM-dd"));
+    const [customStart, setCustomStart] = useState<Date>(startOfMonth(new Date()));
+    const [customEnd, setCustomEnd] = useState<Date>(endOfMonth(new Date()));
 
     const getInterval = () => {
         const now = new Date();
@@ -39,7 +44,7 @@ export default function Dashboard() {
                 return { start: startOfMonth(last), end: endOfMonth(last) };
             }
             case "This Year": return { start: startOfYear(now), end: new Date(now.getFullYear(), 11, 31, 23, 59, 59) };
-            case "Custom": return { start: parseISO(customStart), end: parseISO(customEnd) };
+            case "Custom": return { start: customStart, end: customEnd };
             default: return { start: startOfMonth(now), end: endOfMonth(now) };
         }
     };
@@ -147,34 +152,78 @@ export default function Dashboard() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <PageHeader title="Dashboard Analytics" />
                     
-                    {/* Premium Segmented Filter */}
-                    <div className="inline-flex items-center gap-1 bg-muted/40 p-1.5 rounded-full border shadow-inner self-start">
-                        {["Today", "This Week", "This Month", "Last Month", "This Year", "Custom"].map((type) => (
-                            <button
-                                key={type}
-                                onClick={() => setFilterType(type)}
-                                className={`px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-tight transition-all duration-300 ${
-                                    filterType === type 
-                                    ? "bg-background text-primary shadow-md ring-1 ring-black/5" 
-                                    : "text-muted-foreground hover:text-foreground hover:bg-background/40"
-                                }`}
-                            >
-                                {type}
-                            </button>
-                        ))}
+                    {/* Premium Segmented Filter - Scrollable on Mobile */}
+                    <div className="w-full md:w-auto overflow-x-auto scrollbar-hide pb-1">
+                        <div className="inline-flex items-center gap-1 bg-muted/40 p-1 rounded-full border shadow-inner">
+                            {["Today", "This Week", "This Month", "Last Month", "This Year", "Custom"].map((type) => (
+                                <button
+                                    key={type}
+                                    onClick={() => setFilterType(type)}
+                                    className={`px-3 md:px-5 py-1 md:py-2 rounded-full text-[9px] md:text-xs font-bold uppercase tracking-tight transition-all duration-300 whitespace-nowrap flex-shrink-0 ${
+                                        filterType === type 
+                                        ? "bg-background text-primary shadow-sm ring-1 ring-black/5" 
+                                        : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                                    }`}
+                                >
+                                    {type}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
                 {filterType === "Custom" && (
-                    <div className="flex items-center gap-3 p-4 bg-card rounded-2xl border shadow-sm animate-in slide-in-from-top-2 duration-300 max-w-fit">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black uppercase text-muted-foreground">From</span>
-                            <Input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="h-9 text-xs font-semibold w-40 rounded-lg" />
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 p-4 bg-card rounded-2xl border shadow-sm animate-in slide-in-from-top-2 duration-300 w-full md:max-w-fit">
+                        <div className="flex items-center gap-3 justify-between md:justify-start">
+                            <span className="text-[10px] font-black uppercase text-muted-foreground min-w-[32px]">From</span>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant={"outline"}
+                                        className={cn(
+                                            "w-full md:w-44 justify-start text-left font-normal h-10 md:h-9 text-xs rounded-lg bg-background/50",
+                                            !customStart && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                        {customStart ? format(customStart, "PPP") : <span>Pick a date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={customStart}
+                                        onSelect={(date) => date && setCustomStart(date)}
+                                        initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
                         </div>
-                        <div className="w-4 h-px bg-border"></div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black uppercase text-muted-foreground">To</span>
-                            <Input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="h-9 text-xs font-semibold w-40 rounded-lg" />
+                        <div className="hidden md:block w-4 h-px bg-border"></div>
+                        <div className="flex items-center gap-3 justify-between md:justify-start">
+                            <span className="text-[10px] font-black uppercase text-muted-foreground min-w-[32px]">To</span>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant={"outline"}
+                                        className={cn(
+                                            "w-full md:w-44 justify-start text-left font-normal h-10 md:h-9 text-xs rounded-lg bg-background/50",
+                                            !customEnd && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                        {customEnd ? format(customEnd, "PPP") : <span>Pick a date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={customEnd}
+                                        onSelect={(date) => date && setCustomEnd(date)}
+                                        initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
                 )}

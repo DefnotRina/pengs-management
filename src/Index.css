@@ -66,10 +66,65 @@
 
 @layer utilities {
     .stat-number {
-        @apply text-2xl md:text-3xl font-bold tracking-tight;
+        @apply text-xl md:text-3xl font-bold tracking-tight;
     }
 
     .touch-target {
         @apply min-h-[44px] min-w-[44px];
     }
+
+    /* Date Input Fixes for Mobile/iOS */
+    input[type="date"] {
+        -webkit-appearance: none;
+        appearance: none;
+        min-height: 2.5rem;
+        display: flex;
+        align-items: center;
+        text-align: left;
+    }
+
+    input[type="date"]::-webkit-calendar-picker-indicator {
+        opacity: 0.5;
+        cursor: pointer;
+    }
+
+    /* Forcing the inner text of date inputs to align well on iOS */
+    input[type="date"]::-webkit-datetime-edit {
+        display: flex;
+        padding: 0;
+    }
+}
+/* Force Desktop Layout on Receipt Content for Mobile Views */
+@media (max-width: 767px) {
+  .force-desktop-receipt {
+    width: 700px !important;
+    max-width: 700px !important;
+    transform: scale(0.45);
+    transform-origin: top center;
+    margin-bottom: -50%;
+  }
+  
+  /* Override Tailwind md: classes manually to force desktop layout */
+  .force-desktop-receipt.flex-col {
+     flex-direction: row !important;
+  }
+  .force-desktop-receipt .md\:flex-row {
+     flex-direction: row !important;
+  }
+  .force-desktop-receipt .md\:border-r-2 {
+     border-right-width: 2px !important;
+  }
+  .force-desktop-receipt .md\:border-dashed {
+     border-style: dashed !important;
+  }
+  .force-desktop-receipt .md\:border-gray-200 {
+     border-color: #e5e7eb !important;
+  }
+  .force-desktop-receipt .md\:pr-8 {
+     padding-right: 2rem !important;
+  }
+  .force-desktop-receipt .md\:text-base {
+     font-size: 1rem !important;
+     line-height: 1.5rem !important;
+  }
 }

@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { DesktopSidebar, MobileNav } from "./AppNav";
+import { DesktopSidebar, MobileNav, MobileHeader } from "./AppNav";
 import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/pages/Login";
 
@@ -11,9 +11,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex min-h-screen w-full bg-background overflow-x-hidden">
       <DesktopSidebar />
-      <main className="flex-1 pb-20 md:pb-0 pt-6 px-4 md:px-8">
+      <MobileHeader />
+      <main className="flex-1 pb-20 md:pb-0 pt-24 md:pt-6 px-4 md:px-8 max-w-full overflow-x-hidden">
         {children}
       </main>
       <MobileNav />
