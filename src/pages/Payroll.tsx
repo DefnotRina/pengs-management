@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/StatCard";
@@ -48,7 +48,9 @@ export default function Payroll() {
   const [settling, setSettling] = useState(false);
   const [viewingReceipt, setViewingReceipt] = useState<any>(null);
   const [allCaData, setAllCaData] = useState<any[]>([]);
-  const [selectedCaIds, setSelectedCaIds] = useState<number[]>([]);
+  const [selectedCaIds, setSelectedCaIds] = useState<string[]>([]);
+  const [receiptScale, setReceiptScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Confirmation State
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -62,8 +64,8 @@ export default function Payroll() {
   const pieceRate = Number(localStorage.getItem('peng_piece_rate') || '3.5');;
 
   const downloadReceipt = async () => {
-      const element = document.getElementById("receipt-content");
-      if (!element) return;
+       const element = document.getElementById("receipt-master");
+       if (!element) return;
       try {
           const canvas = await html2canvas(element, { scale: 2, backgroundColor: "#ffffff" });
           const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
@@ -106,9 +108,9 @@ export default function Payroll() {
     } else if (packingData && employeesData) {
       
       const empMap = employeesData.reduce((acc: any, emp: any) => {
-        // Only count PENDING advances in the balance
+        // Count PENDING advances in the balance (Deducted, Partially Deducted and Written-off are excluded)
         const caBalance = (caData || [])
-            .filter((a: any) => a.employee_name === emp.names && a.status !== 'Deducted')
+            .filter((a: any) => a.employee_name === emp.names && a.status === 'Pending')
             .reduce((sum: number, a: any) => sum + Number(a.amount), 0);
 
         // Check if they have a finalized receipt for this week
@@ -143,7 +145,6 @@ export default function Payroll() {
       const computed = Object.values(empMap).map((c: any) => {
         let pay = 0;
         if (c.pay_type?.toLowerCase().includes('output')) {
-           // Sum each entry's floored ÷11 value, then × rate — matches what payslip shows
            const totalUnits = c.detailedEntries.reduce((sum: number, e: any) => sum + Math.floor(e.pieces / 11), 0);
            pay = totalUnits * pieceRate;
         }
@@ -153,10 +154,21 @@ export default function Payroll() {
         };
       });
 
-      // Always show all employees so cooks never "disappear" during selective week filters
-      const activePayroll = computed;
+      // SMART FILTER: Only show someone if:
+      // 1. They are currently 'Active'
+      // 2. OR they did some work this week (totalPieces > 0)
+      // 3. OR they were already paid this week (receipt exists)
+      const filteredPayroll = computed.filter((c: any) => {
+          const emp = employeesData.find(e => e.names === c.names);
+          const status = emp?.status || 'Active';
+          return (
+              status === 'Active' || 
+              c.totalPieces > 0 || 
+              !!c.receipt
+          );
+      });
 
-      setPayroll(activePayroll.sort((a, b) => b.computedPay - a.computedPay));
+      setPayroll(filteredPayroll.sort((a, b) => b.computedPay - a.computedPay));
     }
     setIsLoading(false);
   };
@@ -164,6 +176,26 @@ export default function Payroll() {
   useEffect(() => {
     fetchPayroll();
   }, [weekStart, weekEnd]);
+
+  // UNIVERSAL AUTO-SCALING LOGIC
+  useEffect(() => {
+    if (!viewingReceipt) return;
+    
+    const updateScale = () => {
+        const width = window.innerWidth;
+        if (width < 800) {
+            // Target 92% of screen width, but never larger than 1 (100%)
+            const newScale = Math.min(1, (width * 0.92) / 800);
+            setReceiptScale(newScale);
+        } else {
+            setReceiptScale(1);
+        }
+    };
+
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, [viewingReceipt]);
 
   const openPayslip = (emp: any) => {
       setSelectedEmp(emp);
@@ -175,11 +207,11 @@ export default function Payroll() {
   };
 
   const toggleCa = (ca: any) => {
-      const isSelected = selectedCaIds.includes(ca.id);
+      const isSelected = selectedCaIds.includes(String(ca.id));
       if (isSelected) {
-          setSelectedCaIds(prev => prev.filter(id => id !== ca.id));
+          setSelectedCaIds(prev => prev.filter(id => id !== String(ca.id)));
       } else {
-          setSelectedCaIds(prev => [...prev, ca.id]);
+          setSelectedCaIds(prev => [...prev, String(ca.id)]);
       }
   };
 
@@ -199,16 +231,19 @@ export default function Payroll() {
       setSettling(true);
 
       // Combine C/A and Custom Deductions for the persistent record
+      // Use explicit type to ensure ca_id is always preserved
+      type BreakdownItem = { label: string; amount: number; ca_id?: string };
       const selectedCaItems = allCaData.filter(ca => selectedCaIds.includes(ca.id));
-      const combinedBreakdown = [
+      const combinedBreakdown: BreakdownItem[] = [
           ...selectedCaItems.map(ca => ({ 
               label: (ca.note || "C/A").replace(/^C\/A\s-\s/i, ''), 
               amount: Number(ca.amount),
-              ca_id: ca.id // Store for editing/reverting
+              ca_id: String(ca.id) // UUID stays as string — DO NOT cast to Number
           })),
           ...customDeductions.map(d => ({
-              ...d,
-              label: d.label.replace(/^C\/A\s-\s/i, '')
+              label: d.label.replace(/^C\/A\s-\s/i, ''),
+              amount: Number(d.amount),
+              ca_id: undefined
           }))
       ];
 
@@ -216,7 +251,9 @@ export default function Payroll() {
       const grossIncome = selectedEmp.pay_type?.toLowerCase().includes('output') 
           ? selectedEmp.computedPay 
           : Number(selectedEmp.base_salary || 0);
-      const netPay = grossIncome - totalDed;
+
+      const actualDeduction = Math.min(grossIncome, totalDed);
+      const finalNetPay = Math.max(0, grossIncome - totalDed);
 
       // Generate Payslip Receipt with Breakdown JSON
       const { error: receiptErr } = await supabase.from('payroll_receipts').insert({
@@ -224,31 +261,80 @@ export default function Payroll() {
           week_start: weekStart,
           week_end: weekEnd,
           gross_income: grossIncome,
-          ca_deduction: totalDed,
-          net_total: netPay,
+          ca_deduction: actualDeduction, // Cap it for the record
+          net_total: finalNetPay, // Settle at 0
           deductions_breakdown: combinedBreakdown // JSON column
       });
 
       if (receiptErr) {
           toast.error("Failed to generate payslip!");
-          console.error(receiptErr);
           setSettling(false);
           return;
       }
 
-      // Mark selected CA advances as Deducted
-      if (selectedCaIds.length > 0) {
-          await supabase.from('cash_advances')
-              .update({ status: 'Deducted' })
-              .in('id', selectedCaIds);
+      // SMART CARRY-OVER: walk through each deduction item in order of income availability
+      // and determine the exact status for each CA:
+      //   Deducted         = income fully covered this item
+      //   Partially Deducted = income only covered part of this item (remainder is carried over)
+      //   Pending (no-op)  = income was already exhausted (₱0 taken for this item)
+      let runningIncome = grossIncome;
+      const invisibleMarker = "\u200B";
+
+      for (const item of combinedBreakdown) {
+          const itemAmount = Number(item.amount);
+          const amountCovered = Math.min(itemAmount, runningIncome);
+          const remainingForItem = itemAmount - amountCovered;
+
+          // Only update status for real CA entries (not custom deductions)
+          if (item.ca_id != null) {
+              if (amountCovered <= 0) {
+                  // ₱0 income — nothing taken, leave as Pending (no update)
+              } else if (remainingForItem > 0) {
+                  // Partially covered — mark original as Partially Deducted
+                  const { error: partialErr } = await supabase
+                      .from('cash_advances')
+                      .update({ status: 'Partially Deducted' })
+                      .eq('id', item.ca_id);
+                  if (partialErr) console.error('Failed to update Partially Deducted:', partialErr);
+              } else {
+                  // Fully covered — mark as Deducted
+                  const { error: fullErr } = await supabase
+                      .from('cash_advances')
+                      .update({ status: 'Deducted' })
+                      .eq('id', item.ca_id);
+                  if (fullErr) console.error('Failed to update Deducted:', fullErr);
+              }
+          }
+
+          // Insert carry-over entry for whatever couldn't be covered
+          if (remainingForItem > 0) {
+              const originalDate = item.ca_id != null
+                ? (allCaData.find(ca => ca.id === item.ca_id)?.date || format(new Date(), 'yyyy-MM-dd'))
+                : format(new Date(), 'yyyy-MM-dd');
+
+              await supabase.from('cash_advances').insert({
+                  employee_name: selectedEmp.names,
+                  amount: remainingForItem,
+                  note: item.label + invisibleMarker,
+                  status: 'Pending',
+                  date: originalDate // PRESERVE ORIGINAL DATE
+              });
+          }
+          runningIncome = Math.max(0, runningIncome - amountCovered);
       }
 
-      toast.success(`Payslip generated for ${selectedEmp.names}`);
+      if (totalDed > grossIncome) {
+          toast.warning(`Net pay was negative. Remaining balances were automatically carried over with original dates.`);
+      } else {
+          toast.success(`Payslip generated for ${selectedEmp.names}`);
+      }
+
       setSettling(false);
       setPayslipModalOpen(false);
       setSelectedCaIds([]);
       fetchPayroll();
   };
+
 
   const selectedCaAmountTotal = allCaData
       .filter(ca => selectedCaIds.includes(ca.id))
@@ -262,6 +348,125 @@ export default function Payroll() {
       : 0;
   const currentNetPay = currentGross - currentTotalDeductions;
 
+  // REUSABLE RECEIPT TEMPLATE FOR CLEAN RENDERING
+  const ReceiptTemplate = ({ id, empData, receiptData, entries }: any) => (
+      <div id={id} className="w-[800px] p-8 bg-white text-black min-h-[300px] font-mono text-sm leading-tight text-left">
+          <div className="text-center mb-6 border-b-2 border-dashed border-gray-300 pb-4">
+              <h2 className="text-2xl font-bold tracking-widest uppercase mb-1">PAYSLIP</h2>
+              <p className="text-sm font-semibold text-gray-600 uppercase tracking-widest">{empData.names}</p>
+              <p className="text-xs text-gray-400">{receiptData.week_start} to {receiptData.week_end}</p>
+          </div>
+          
+          <div className={`flex flex-row gap-8 ${!empData?.pay_type?.toLowerCase().includes('output') ? 'justify-center' : ''}`}>
+              {/* Left Column: Daily Output */}
+              {empData?.pay_type?.toLowerCase().includes('output') && (
+                  <div className="flex-1 border-r-2 border-dashed border-gray-200 pr-8">
+                      <h3 
+                          className="font-bold mb-3 inline-block pb-1 uppercase tracking-widest"
+                          style={{ color: '#98a1ac', fontSize: '12px', letterSpacing: '1.7px' }}
+                      >
+                          PRODUCTION TIMELINE
+                      </h3>
+                      <div className="space-y-1 mb-4 text-xs font-mono">
+                          {/* Evenly Spread Header */}
+                          <div 
+                              className="grid grid-cols-4 gap-2 uppercase pb-1 border-b border-gray-200 font-mono"
+                              style={{ color: '#d4d5db', fontSize: '10px' }}
+                          >
+                              <span className="text-left font-bold">Date</span>
+                              <span className="text-center font-bold">Type</span>
+                              <span className="text-center font-bold">Packs</span>
+                              <span className="text-right font-bold">÷11</span>
+                          </div>
+                          {(entries || []).map((e: any, i: number) => {
+                              const rateUnits = Math.floor(e.pieces / 11);
+                              return (
+                                  <div key={i} className="grid grid-cols-4 gap-2 items-center border-b border-gray-50 py-0.5 font-mono">
+                                      <span 
+                                          className="text-left font-bold"
+                                          style={{ color: '#4f515d', fontSize: '10px' }}
+                                      >
+                                          {e.date}
+                                      </span>
+                                      <span 
+                                          className="text-center font-bold"
+                                          style={{ color: '#98a1ac', fontSize: '10px' }}
+                                      >
+                                          {e.pack_size}'s
+                                      </span>
+                                        <span 
+                                            className="text-center font-bold"
+                                            style={{ color: '#4f515d', fontSize: '10px' }}
+                                        >
+                                            {e.packs_produced}
+                                        </span>
+                                      <span className="text-right font-bold text-blue-700">{rateUnits}</span>
+                                  </div>
+                              );
+                          })}
+                          {(entries || []).length === 0 && (
+                              <p className="text-xs text-gray-400 italic">No packing entries for this week.</p>
+                          )}
+                      </div>
+                      <div className="flex justify-between items-center text-sm font-bold pt-2 border-t-2 border-gray-300">
+                          <span style={{ fontSize: '14px' }}>Total Output</span>
+                          <span className="text-blue-700 bg-blue-50 px-2 py-1 rounded">
+                              {(entries || []).reduce((sum: number, e: any) => sum + Math.floor(e.pieces / 11), 0)}
+                          </span>
+                      </div>
+                  </div>
+              )}
+              
+              {/* Right Column: Financials */}
+              <div className="flex-1 min-w-[300px]">
+                  <h3 
+                      className="font-bold mb-3 inline-block pb-1 uppercase tracking-widest"
+                      style={{ color: '#98a1ac', fontSize: '12px', letterSpacing: '1.7px' }}
+                  >
+                      FINANCIAL SUMMARY
+                  </h3>
+                  <div className="space-y-4 text-sm font-mono">
+                        <div className="flex justify-between items-center p-2 border-b border-gray-100">
+                            <span className="font-bold text-gray-600" style={{ fontSize: '12px' }}>GROSS INCOME</span>
+                            <span className="font-bold text-black" style={{ fontSize: '12px' }}>{formatCurrency(receiptData.gross_income)}</span>
+                        </div>
+                      
+                      <div className="pt-2">
+                          <span className="font-bold text-gray-600 pb-1 mb-2 inline-block w-full text-xs">DEDUCTIONS</span>
+                          {receiptData.deductions_breakdown?.length > 0 ? (
+                              receiptData.deductions_breakdown.map((ded: any, i: number) => (
+                                  <div key={i} className="flex justify-between text-xs mb-1.5 px-1 bg-red-50/10 rounded py-0.5">
+                                      <span className="text-gray-600 font-medium">{ded.label}</span>
+                                      <span className="text-red-600 font-bold">₱{Number(ded.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                              ))
+                          ) : (
+                              <p className="text-xs text-gray-400 px-1 italic">No deductions filed.</p>
+                          )}
+                          <div className="flex justify-between text-xs font-bold mt-2 pt-2 border-t border-gray-200 px-1">
+                              <span>TOTAL DEDUCTED</span>
+                              <span className="text-destructive">-{formatCurrency(receiptData.ca_deduction)}</span>
+                          </div>
+
+                          {/* Show Carry Over if pay was capped */}
+                          {receiptData.gross_income < receiptData.deductions_breakdown?.reduce((s: number, d: any) => s + Number(d.amount), 0) && (
+                              <div className="flex justify-between text-[11px] font-bold text-orange-600 bg-orange-50 mt-1 px-1 py-1 rounded">
+                                  <span className="italic">CARRY OVER DEBT:</span>
+                                  <span>{formatCurrency(receiptData.deductions_breakdown?.reduce((s: number, d: any) => s + Number(d.amount), 0) - receiptData.gross_income)}</span>
+                              </div>
+                          )}
+                      </div>
+
+                        <div className="flex justify-between items-center pt-4 border-t-2 border-black mt-2">
+                            <span className="font-extrabold tracking-widest text-sm">NET PAY</span>
+                            <span className="font-extrabold text-lg text-green-700">{formatCurrency(receiptData.net_total)}</span>
+                        </div>
+                  </div>
+              </div>
+          </div>
+      </div>
+  );
+
   const handleEditPayslip = async (receipt: any) => {
       setConfirmConfig({
           open: true,
@@ -271,23 +476,39 @@ export default function Payroll() {
               setConfirmConfig(prev => ({ ...prev, open: false }));
               
               // 1. Identify which CAs were used
-              const caIdsFromBreakdown = receipt.deductions_breakdown
+              const caIdsFromBreakdown: string[] = receipt.deductions_breakdown
                   ?.filter((d: any) => d.ca_id)
-                  .map((d: any) => d.ca_id) || [];
+                  .map((d: any) => String(d.ca_id)) || [];
                   
-              // 2. Revert those CAs to 'Pending'
+              // 2. Revert those CAs to 'Pending' (covers both 'Deducted' and 'Partially Deducted')
               if (caIdsFromBreakdown.length > 0) {
-                  await supabase.from('cash_advances').update({ status: 'Pending' }).in('id', caIdsFromBreakdown);
+                  await supabase.from('cash_advances')
+                      .update({ status: 'Pending' })
+                      .in('id', caIdsFromBreakdown)
+                      .in('status', ['Deducted', 'Partially Deducted']);
               }
               
               // 3. Delete the old receipt
               const { error } = await supabase.from('payroll_receipts').delete().eq('id', receipt.id);
+
               if (error) {
                   toast.error("Failed to unlock payslip for editing");
                   return;
               }
+
+              // 4. Undo any carry-over debt that was automatically created (identifying by the invisible \u200B marker)
+              // Each carry-over entry was inserted as: label + invisibleMarker, so delete them one by one
+              const invisibleMarker = "\u200B";
+              const labelsInBreakdown = receipt.deductions_breakdown?.map((d: any) => d.label) || [];
+              for (const label of labelsInBreakdown) {
+                  await supabase.from('cash_advances')
+                      .delete()
+                      .eq('employee_name', receipt.employee_name)
+                      .eq('note', label + invisibleMarker)
+                      .eq('status', 'Pending');
+              }
               
-              // 4. Pre-fill the creation modal
+              // 5. Pre-fill the creation modal
               const emp = payroll.find(p => p.names === receipt.employee_name);
               if (emp) {
                   setSelectedEmp(emp);
@@ -374,13 +595,13 @@ export default function Payroll() {
                                     <span>{selectedEmp.totalPieces.toLocaleString()} pcs</span>
                                 </h3>
                                 <div className="space-y-1.5 md:space-y-2 bg-muted/20 p-3 md:p-4 rounded-lg border border-border">
-                                    {Object.entries(selectedEmp?.dailyProduction || {}).map(([date, pcs]: any) => (
-                                        <div key={date} className="flex justify-between items-center text-xs md:text-sm border-b border-border/40 pb-1.5 md:pb-2 last:border-0 last:pb-0">
-                                            <span className="font-medium text-muted-foreground">{date}</span>
-                                            <span className="font-bold text-foreground">{(pcs || 0).toLocaleString()} pcs</span>
+                                    {(selectedEmp?.detailedEntries || []).map((e: any, i: number) => (
+                                        <div key={i} className="flex justify-between items-center text-xs md:text-sm border-b border-border/40 pb-1.5 md:pb-2 last:border-0 last:pb-0">
+                                            <span className="font-medium text-muted-foreground">{e.date} • {e.pack_size}'s</span>
+                                            <span className="font-bold text-foreground">{(e.packs_produced || 0).toLocaleString()} packs</span>
                                         </div>
                                     ))}
-                                    {Object.keys(selectedEmp?.dailyProduction || {}).length === 0 && (
+                                    {(!selectedEmp?.detailedEntries || selectedEmp.detailedEntries.length === 0) && (
                                         <p className="text-[10px] md:text-xs text-center text-muted-foreground">No production mapped for this week.</p>
                                     )}
                                 </div>
@@ -404,16 +625,16 @@ export default function Payroll() {
                                 </p>
                             )}
 
-                            {/* CA Quick-Pick from ledger */}
-                            {allCaData.filter(ca => ca.employee_name === selectedEmp.names && (ca.status !== 'Deducted' || selectedCaIds.includes(ca.id))).length > 0 && (
+                            {/* CA Quick-Pick from ledger: Only show Pending (active / carry-over). Deducted & Partially Deducted are archived. */}
+                            {allCaData.filter(ca => ca.employee_name === selectedEmp.names && ca.status === 'Pending').length > 0 && (
                                 <div className="mb-4">
                                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pick C/A to Deduct</p>
                                     <div className="space-y-1.5 md:space-y-2">
-                                        {allCaData.filter(ca => ca.employee_name === selectedEmp.names && (ca.status !== 'Deducted' || selectedCaIds.includes(ca.id))).map((ca: any) => (
+                                        {allCaData.filter(ca => ca.employee_name === selectedEmp.names && ca.status === 'Pending').map((ca: any) => (
                                             <label key={ca.id} className={`flex items-center gap-2 md:gap-3 p-2 md:p-2.5 rounded-md border cursor-pointer transition-colors ${selectedCaIds.includes(ca.id) ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/20'}`}>
                                                 <input type="checkbox" checked={selectedCaIds.includes(ca.id)} onChange={() => toggleCa(ca)} className="accent-primary h-3.5 w-3.5 md:h-4 md:w-4" />
                                                 <span className="flex-1 text-xs md:text-sm">
-                                                    <span className="font-medium">{ca.note || "Cash Advance"}</span>
+                                                    <span className="font-medium">{(ca.note || "Cash Advance").replace(/\u200B/g, '')}</span>
                                                     <span className="text-[10px] md:text-xs text-muted-foreground ml-2">{ca.date}</span>
                                                 </span>
                                                 <span className="text-xs md:text-sm font-bold text-destructive">{formatCurrency(ca.amount)}</span>
@@ -464,16 +685,20 @@ export default function Payroll() {
                         </div>
                     </div>
                     
-                    {/* Sticky Footer */}
-                    <div className="p-4 md:p-6 border-t border-border bg-muted/10 sticky bottom-0">
-                        <div className="flex justify-between items-end mb-3 md:mb-4">
-                            <span className="text-[11px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Final Net Pay</span>
-                            <span className="text-xl md:text-3xl font-extrabold text-success">{formatCurrency(currentNetPay)}</span>
+                    {/* Sticky Footer with Solid Background to hide scrolling text */}
+                    <div className="p-4 md:p-6 border-t border-border bg-white dark:bg-slate-910 sticky bottom-0 z-20 shadow-[0_-8px_25px_rgba(0,0,0,0.05)]">
+                        <div className="flex flex-row items-center justify-between gap-4">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-widest leading-tight">Final Net Pay</span>
+                                <span className={`text-xl md:text-2xl font-extrabold leading-tight ${currentNetPay < 0 ? 'text-destructive' : 'text-success'}`}>
+                                    {formatCurrency(currentNetPay)}
+                                </span>
+                            </div>
+                            <Button disabled={settling} onClick={handleSettle} className="flex-1 md:flex-none md:min-w-[200px] text-sm md:text-base h-11 md:h-12 shadow-sm rounded-full">
+                                <Check className="h-4 w-4 mr-2" />
+                                Finalize & Issue
+                            </Button>
                         </div>
-                        <Button disabled={settling} onClick={handleSettle} className="w-full text-sm md:text-base h-10 md:h-12 shadow-sm">
-                            <Check className="h-4 w-4 md:h-5 md:w-5 mr-2" />
-                            Finalize & Issue Payslip
-                        </Button>
                     </div>
                 </div>
             )}
@@ -482,106 +707,64 @@ export default function Payroll() {
 
       {/* View Printable Receipt Modal */}
       <Dialog open={!!viewingReceipt} onOpenChange={(open) => !open && setViewingReceipt(null)}>
-        <DialogContent className="max-w-3xl w-[95vw] p-0 bg-white dark:bg-slate-950 border-border">
+        <DialogContent className="max-w-4xl w-[95vw] p-0 bg-white dark:bg-slate-950 border-border overflow-hidden">
             <DialogHeader className="sr-only">
                 <DialogTitle>View Receipt</DialogTitle>
                 <DialogDescription>Printable payslip receipt</DialogDescription>
             </DialogHeader>
             {viewingReceipt && (
-                <div className="p-0 font-mono text-sm max-h-[90vh] overflow-y-auto">
-                    {/* The literal Receipt Image target */}
-                    <div id="receipt-content" className="p-8 bg-white text-black min-h-[300px]">
-                        <div className="text-center mb-6 border-b-2 border-dashed border-gray-300 pb-4">
-                            <h2 className="text-2xl font-bold tracking-widest uppercase mb-1">PAYSLIP</h2>
-                            <p className="text-sm font-semibold text-gray-600 uppercase tracking-widest">{viewingReceipt.names}</p>
-                            <p className="text-xs text-gray-400">{viewingReceipt.receipt.week_start} to {viewingReceipt.receipt.week_end}</p>
-                        </div>
-                                           <div className={`flex flex-col md:flex-row gap-8 ${!viewingReceipt?.pay_type?.toLowerCase().includes('output') ? 'justify-center max-w-sm mx-auto' : ''}`}>
-                            {/* Left Column: Daily Output */}
-                            {viewingReceipt?.pay_type?.toLowerCase().includes('output') && (
-                                <div className="flex-1 md:border-r-2 md:border-dashed md:border-gray-200 md:pr-8">
-                                    <h3 className="font-bold mb-3 border-b-2 border-black inline-block pb-1 tracking-wider text-xs">PRODUCTION TIMELINE</h3>
-                                    <div className="space-y-1 mb-4 text-xs font-mono">
-                                        {/* Header row */}
-                                        <div className="flex gap-2 text-gray-400 uppercase text-[10px] pb-1 border-b border-gray-200">
-                                            <span className="w-24">Date</span>
-                                            <span className="w-10 text-center">Type</span>
-                                            <span className="w-12 text-right">Packs</span>
-                                            <span className="w-14 text-right">÷11</span>
-                                        </div>
-                                        {(viewingReceipt?.detailedEntries || []).map((e: any, i: number) => {
-                                            const rateUnits = Math.floor(e.pieces / 11);
-                                            return (
-                                                <div key={i} className="flex gap-2 items-center border-b border-gray-50 py-0.5">
-                                                    <span className="w-24 text-gray-600">{e.date}</span>
-                                                    <span className="w-10 text-center font-semibold text-gray-700">{e.pack_size}'s</span>
-                                                    <span className="w-12 text-right text-gray-800">{e.packs_produced}</span>
-                                                    <span className="w-14 text-right font-bold text-blue-700">{rateUnits}</span>
-                                                </div>
-                                            );
-                                        })}
-                                        {(viewingReceipt?.detailedEntries || []).length === 0 && (
-                                            <p className="text-xs text-gray-400 italic">No packing entries for this week.</p>
-                                        )}
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm font-bold pt-2 border-t-2 border-gray-300">
-                                        <span>TOTAL (÷11)</span>
-                                        <span className="text-blue-700 bg-blue-50 px-2 py-1 rounded">
-                                            {(viewingReceipt?.detailedEntries || []).reduce((sum: number, e: any) => sum + Math.floor(e.pieces / 11), 0)}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {/* Right Column: Financials */}
-                            <div className="flex-1">
-                                <h3 className="font-bold mb-3 border-b-2 border-black inline-block pb-1 tracking-wider text-xs">FINANCIAL SUMMARY</h3>
-                                <div className="space-y-4 text-xs lg:text-sm">
-                                    <div className="flex justify-between items-center bg-green-50 p-2 rounded border border-green-100">
-                                        <span className="font-bold text-gray-600">GROSS INCOME</span>
-                                        <span className="font-bold text-green-700 text-sm md:text-base">{formatCurrency(viewingReceipt.receipt.gross_income)}</span>
-                                    </div>
-                                    
-                                    <div className="pt-2">
-                                        <span className="font-bold text-gray-600 border-b border-gray-300 pb-1 mb-2 inline-block w-full text-xs">DEDUCTIONS</span>
-                                        {viewingReceipt.receipt.deductions_breakdown?.length > 0 ? (
-                                            viewingReceipt.receipt.deductions_breakdown.map((ded: any, i: number) => (
-                                                <div key={i} className="flex justify-between text-xs mb-1.5 px-1 bg-red-50/10 rounded py-0.5">
-                                                    <span className="text-gray-600 font-medium">{ded.label}</span>
-                                                    <span className="text-red-600 font-bold">₱{Number(ded.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-xs text-gray-400 px-1 italic">No deductions filed.</p>
-                                        )}
-                                        <div className="flex justify-between text-xs font-bold mt-2 pt-2 border-t border-gray-200 px-1">
-                                            <span>TOTAL DEDUCTED</span>
-                                            <span className="text-destructive">-{formatCurrency(viewingReceipt.receipt.ca_deduction)}</span>
-                                        </div>
-                                    </div>
+                <>
+                    {/* HIDDEN MASTER FOR CLEAN DOWNLOADS - NO SCALING */}
+                    <div className="fixed top-[-9999px] left-[-9999px] pointer-events-none opacity-0 z-[-50]">
+                        <ReceiptTemplate 
+                            id="receipt-master"
+                            empData={viewingReceipt}
+                            receiptData={viewingReceipt.receipt}
+                            entries={viewingReceipt.detailedEntries}
+                        />
+                    </div>
 
-                                    <div className="flex justify-between items-center bg-gray-100 p-3 rounded-md border-t-2 border-black mt-2">
-                                        <span className="font-extrabold tracking-widest text-sm">NET PAY</span>
-                                        <span className="font-extrabold text-lg text-green-700">{formatCurrency(viewingReceipt.receipt.net_total)}</span>
-                                    </div>
-                                </div>
+                    <div className="p-0 font-mono text-sm max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col items-center bg-muted/5 relative">
+                        {/* 
+                            UNIVERSAL AUTO-SCALING CONTAINER
+                            Dynamically calculates height to remove "ghost space" on any device.
+                        */}
+                        <div 
+                            className="w-full flex justify-center overflow-visible py-6 md:py-12 px-4 transition-all duration-300"
+                            style={{ minHeight: `${700 * receiptScale}px` }}
+                        >
+                            <div 
+                                className="transform-gpu shadow-2xl rounded-sm ring-1 ring-black/5"
+                                style={{ 
+                                    transform: `scale(${receiptScale})`, 
+                                    transformOrigin: 'top center',
+                                    width: '800px',
+                                    height: 'fit-content'
+                                }}
+                            >
+                                <ReceiptTemplate 
+                                    id="receipt-content"
+                                    empData={viewingReceipt}
+                                    receiptData={viewingReceipt.receipt}
+                                    entries={viewingReceipt.detailedEntries}
+                                />
                             </div>
                         </div>
-                    </div>
-                    
-                    {/* Action Bar */}
-                    <div className="p-4 bg-gray-100 border-t border-border flex flex-col sm:flex-row justify-end gap-3 print:hidden">
-                        <Button variant="outline" onClick={() => setViewingReceipt(null)}>Close</Button>
-                        {role === 'admin' && (
-                            <Button variant="secondary" onClick={() => handleEditPayslip({ ...viewingReceipt.receipt, employee_name: viewingReceipt.names })} className="text-blue-600">
-                                Edit / Re-issue
+                        
+                        {/* Perfect Sticky Action Bar */}
+                        <div className="w-full p-4 bg-white/80 backdrop-blur-md border-t border-border flex flex-col sm:flex-row justify-end gap-3 print:hidden sticky bottom-0 z-10 shadow-[0_-8px_30px_rgb(0,0,0,0.06)]">
+                            <Button variant="outline" onClick={() => setViewingReceipt(null)} className="h-10 md:h-11">Close</Button>
+                            {role === 'admin' && (
+                                <Button variant="secondary" onClick={() => handleEditPayslip({ ...viewingReceipt.receipt, employee_name: viewingReceipt.names })} className="text-blue-600 h-10 md:h-11">
+                                    Edit / Re-issue
+                                </Button>
+                            )}
+                            <Button onClick={downloadReceipt} className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 md:h-11 shadow-lg shadow-blue-500/20">
+                                Download JPG Receipt
                             </Button>
-                        )}
-                        <Button onClick={downloadReceipt} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
-                            Download JPG Receipt
-                        </Button>
+                        </div>
                     </div>
-                </div>
+                </>
             )}
         </DialogContent>
       </Dialog>

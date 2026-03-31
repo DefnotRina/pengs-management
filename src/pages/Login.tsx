@@ -3,7 +3,7 @@ import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ShieldCheck, Package, Eye, LockKeyhole } from 'lucide-react';
+import { ShieldCheck, Package, Eye, LockKeyhole, ChevronRight, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 
@@ -24,88 +24,98 @@ export default function Login() {
   };
 
   const roles = [
-    { id: 'admin' as const, label: 'Admin', desc: 'Owner / QA Access', icon: ShieldCheck, color: 'text-primary' },
-    { id: 'packer' as const, label: 'Packer', desc: 'Production Lead', icon: Package, color: 'text-orange-500' },
-    { id: 'viewer' as const, label: 'Viewer', desc: 'Family / Auditor', icon: Eye, color: 'text-muted-foreground' },
+    { id: 'admin' as const, label: 'Admin', desc: 'Owner / QA Access', icon: ShieldCheck },
+    { id: 'packer' as const, label: 'Packer', desc: 'Production Lead', icon: Package },
+    { id: 'viewer' as const, label: 'Viewer', desc: 'Family / Auditor', icon: Eye },
   ];
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 bg-black">
-      {/* Background Image */}
-      <div 
-        className="absolute inset-0 opacity-40 bg-cover bg-center"
-        style={{ backgroundImage: 'url(/Users/carlita/.gemini/antigravity/brain/4d03b623-8319-44b3-ac55-1733308fe2bb/bakery_login_bg_1774770021880.png)' }}
-      />
-      
-      <div className="relative z-10 w-full max-w-md">
-        <div className="text-center mb-8 text-white flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-1000">
-          <img src={logo} alt="Peng's Logo" className="h-20 w-20 mb-4 object-contain drop-shadow-2xl ring-4 ring-white/10 rounded-full" />
-          <h1 className="text-4xl font-black tracking-tight mb-1">Peng's</h1>
-          <p className="text-sm font-medium opacity-70 uppercase tracking-[0.2em]">Production Manager</p>
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+
+      {/* Soft orange glow at the top */}
+      <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] bg-primary/10 blur-3xl rounded-full -translate-y-1/2" />
+
+      <div className="w-full max-w-sm relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+        {/* Logo + branding */}
+        <div className="flex flex-col items-center mb-8 gap-3">
+          <div className="ring-4 ring-primary/20 rounded-full shadow-lg shadow-primary/10 overflow-hidden w-20 h-20 bg-white">
+            <img src={logo} alt="Peng's Logo" className="w-full h-full object-contain" />
+          </div>
+          <div className="text-center">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Peng's</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary mt-0.5">
+              Production Manager
+            </p>
+          </div>
         </div>
 
+        {/* Role selection */}
         {!selectedRole ? (
-          <div className="grid gap-4">
-            {roles.map((role) => (
-              <Card 
-                key={role.id}
-                className="cursor-pointer hover:scale-[1.02] transition-transform duration-300 border-white/10 bg-black/60 backdrop-blur-xl group"
-                onClick={() => {
-                  if (role.id === 'viewer') {
-                    login('viewer');
-                  } else {
-                    setSelectedRole(role.id);
-                  }
-                }}
-              >
-                <CardHeader className="flex flex-row items-center gap-4 p-6">
-                  <div className={`p-3 rounded-xl bg-white/5 ${role.color} group-hover:bg-white/10 transition-colors`}>
-                    <role.icon className="w-6 h-6" />
+          <Card className="shadow-sm border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold text-muted-foreground text-center">
+                Select your role
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2 pt-0">
+              {roles.map((role) => (
+                <button
+                  key={role.id}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all duration-150 group text-left"
+                  onClick={() => {
+                    if (role.id === 'viewer') {
+                      login('viewer');
+                    } else {
+                      setSelectedRole(role.id);
+                    }
+                  }}
+                >
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 group-hover:bg-primary/20 transition-colors">
+                    <role.icon className="w-4 h-4" />
                   </div>
-                  <div>
-                    <CardTitle className="text-white group-hover:text-primary transition-colors">{role.label}</CardTitle>
-                    <CardDescription className="text-white/60">{role.desc}</CardDescription>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-foreground">{role.label}</p>
+                    <p className="text-xs text-muted-foreground">{role.desc}</p>
                   </div>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-primary/60 transition-colors flex-shrink-0" />
+                </button>
+              ))}
+            </CardContent>
+          </Card>
         ) : (
-          <Card className="border-white/10 bg-black/60 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
-            <CardHeader className="text-center">
-              <div className="mx-auto p-3 rounded-xl bg-white/10 text-white mb-4 w-fit">
-                <LockKeyhole className="w-6 h-6" />
+          <Card className="shadow-sm border-border animate-in fade-in zoom-in-95 duration-200">
+            <CardHeader className="pb-2">
+              <button
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mb-3 w-fit"
+                onClick={() => { setSelectedRole(null); setPin(''); }}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <LockKeyhole className="w-5 h-5" />
+                </div>
+                <div className="text-center">
+                  <CardTitle className="text-base">Enter {selectedRole.toUpperCase()} PIN</CardTitle>
+                  <CardDescription className="text-xs mt-0.5">4-digit access code</CardDescription>
+                </div>
               </div>
-              <CardTitle className="text-white">Enter {selectedRole.toUpperCase()} PIN</CardTitle>
-              <CardDescription className="text-white/60">Please provide your access code to continue</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-3 mt-2">
                 <Input
                   type="password"
                   placeholder="••••"
-                  className="bg-white/5 border-white/10 text-white text-center text-4xl h-20 font-mono tracking-[0.5em] focus:ring-primary"
+                  className="text-center text-4xl h-20 font-mono tracking-[0.5em] bg-muted/40 focus-visible:ring-primary"
                   maxLength={4}
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
                   autoFocus
                 />
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    className="text-white/60 hover:text-white"
-                    onClick={() => {
-                      setSelectedRole(null);
-                      setPin('');
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" className="font-bold">
-                    Login
-                  </Button>
-                </div>
+                <Button type="submit" className="w-full font-bold h-11">
+                  Unlock Access
+                </Button>
               </form>
             </CardContent>
           </Card>

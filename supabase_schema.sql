@@ -3,14 +3,39 @@
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Employees
+CREATE TABLE IF NOT EXISTS employees (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    names TEXT NOT NULL,
+    role TEXT NOT NULL,
+    pay_type TEXT NOT NULL,
+    base_salary NUMERIC,
+    status TEXT NOT NULL DEFAULT 'Active', -- Active, On Leave, Inactive
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Cash Advances (C.A.)
+CREATE TABLE IF NOT EXISTS cash_advances (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_name TEXT NOT NULL,
+    date DATE NOT NULL,
+    amount NUMERIC NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Pending', -- Pending, Deducted, Written-off
+    note TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Packing Entries
-CREATE TABLE IF NOT EXISTS packing_entries (
+CREATE TABLE IF NOT EXISTS packing (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     date DATE NOT NULL,
-    cook TEXT NOT NULL,
-    "packSize" INTEGER NOT NULL,
-    packs INTEGER NOT NULL,
-    pieces INTEGER NOT NULL,
+    cook_name TEXT NOT NULL,
+    pack_size INTEGER NOT NULL,
+    packs_produced INTEGER NOT NULL,
+    production_type TEXT DEFAULT 'Packed',
+    leftover_sticks INTEGER DEFAULT 0,
+    notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

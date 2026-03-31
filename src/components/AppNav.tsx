@@ -100,17 +100,16 @@ export function DesktopSidebar() {
     const filteredItems = navItems.filter(item => item.roles.includes(role || 'viewer'));
 
     return (
-        <aside className="hidden md:flex md:w-56 lg:w-64 flex-col border-r border-border bg-card h-screen sticky top-0">
+        <aside className="hidden md:flex md:w-56 lg:w-64 flex-col border-r border-border bg-card h-screen fixed left-0 top-0 z-40">
             <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <img src={logo} alt="Peng's Logo" className="h-10 w-auto object-contain" />
-                    <ShieldAlert className={`h-4 w-4 transition-colors ${isEditMode ? 'text-danger animate-pulse' : 'text-muted-foreground/20'}`} />
                 </div>
                 <button 
                   onClick={logout}
-                  className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground hover:text-danger transition-colors"
+                  className="h-8 w-8 flex items-center justify-center rounded-full bg-muted/20 text-muted-foreground hover:text-danger hover:bg-danger/10 transition-all border border-muted/10 active:scale-90"
                 >
-                  Logout
+                  <LogOut className="h-3.5 w-3.5" />
                 </button>
             </div>
 
@@ -137,9 +136,12 @@ export function DesktopSidebar() {
                 <div className={`mt-auto m-3 p-3 rounded-xl border transition-all duration-300 ${isEditMode ? 'bg-danger/5 border-danger/20' : 'bg-muted/30 border-border'}`}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className={`text-[10px] font-black uppercase tracking-widest ${isEditMode ? 'text-danger' : 'text-muted-foreground'}`}>
-                                Management Mode
-                            </p>
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                                <ShieldAlert className={`h-3 w-3 transition-colors ${isEditMode ? 'text-danger animate-pulse' : 'text-muted-foreground/40'}`} />
+                                <p className={`text-[10px] font-black uppercase tracking-widest ${isEditMode ? 'text-danger' : 'text-muted-foreground'}`}>
+                                    Management Mode
+                                </p>
+                            </div>
                             <p className="text-[9px] text-muted-foreground">Enable editing features</p>
                         </div>
                         <Switch 

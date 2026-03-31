@@ -228,13 +228,14 @@ export default function Packing() {
               <Select value={cook} onValueChange={setCook} required>
                 <SelectTrigger className="text-xs h-9 md:h-10 touch-target"><SelectValue placeholder="Select cook" /></SelectTrigger>
                 <SelectContent>
-                  {employees.filter(c => c.role?.toLowerCase().includes("cook")).length > 0 ? employees.filter(c => c.role?.toLowerCase().includes("cook")).map((c) => (
-                      <SelectItem key={c.id} value={c.names} className="text-xs pl-3">
-                          {c.names}
-                      </SelectItem>
-                  )) : (
-                      <SelectItem value="none" className="text-xs" disabled>No cooks found</SelectItem>
-                  )}
+                  {employees.filter(c => c.role?.toLowerCase().includes("cook") && (c.status || 'Active') === 'Active').length > 0 ? 
+                   employees.filter(c => c.role?.toLowerCase().includes("cook") && (c.status || 'Active') === 'Active').map((c) => (
+                       <SelectItem key={c.id} value={c.names} className="text-xs pl-3">
+                           {c.names}
+                       </SelectItem>
+                   )) : (
+                       <SelectItem value="none" className="text-xs" disabled>No active cooks found</SelectItem>
+                   )}
                 </SelectContent>
               </Select>
             </div>
@@ -478,7 +479,7 @@ export default function Packing() {
                         <Select value={editCook} onValueChange={setEditCook}>
                             <SelectTrigger className="h-10 text-xs"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                {employees.filter(c => c.role?.toLowerCase().includes("cook")).map((c) => (
+                                {employees.filter(c => c.role?.toLowerCase().includes("cook") && (c.status || 'Active') === 'Active').map((c) => (
                                     <SelectItem key={c.id} value={c.names} className="text-xs pl-3">{c.names}</SelectItem>
                                 ))}
                             </SelectContent>

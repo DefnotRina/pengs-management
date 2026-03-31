@@ -14,7 +14,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen w-full bg-background overflow-x-hidden">
       <DesktopSidebar />
       <MobileHeader />
-      <main className="flex-1 pb-20 md:pb-0 pt-24 md:pt-6 px-4 md:px-8 max-w-full overflow-x-hidden">
+      <main className="flex-1 pb-20 md:pb-0 pt-24 md:pt-6 px-4 md:px-8 max-w-full overflow-x-hidden md:ml-56 lg:ml-64">
         {children}
       </main>
       <MobileNav />

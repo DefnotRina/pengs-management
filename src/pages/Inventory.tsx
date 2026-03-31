@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/StatCard";
-import { AlertTriangle, PackageOpen, Trash2, Edit2, RefreshCw, Puzzle } from "lucide-react";
+import { AlertTriangle, PackageOpen, Trash2, Edit2, RefreshCw, Puzzle, XCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { PACK_SIZES, PRODUCTS } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
@@ -711,16 +711,22 @@ export default function Inventory() {
                                 <div key={p.productName} className="p-4">
                                     <div className="flex items-center justify-between mb-2">
                                         <p className="text-sm font-bold text-foreground">{p.productName}</p>
-                                        {p.remaining < 20 && (
+                                        {p.remaining === 0 ? (
+                                            <span className="flex items-center gap-1 text-xs text-destructive bg-destructive/10 px-2 py-0.5 rounded-full font-medium">
+                                                <XCircle className="h-3 w-3" /> No Stock
+                                            </span>
+                                        ) : p.remaining < 200 ? (
                                             <span className="flex items-center gap-1 text-xs text-warning bg-warning/10 px-2 py-0.5 rounded-full font-medium">
                                                 <AlertTriangle className="h-3 w-3" /> Low
                                             </span>
+                                        ) : (
+                                            <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full font-medium">In Stock</span>
                                         )}
                                     </div>
                                     <div className="flex gap-4 text-xs text-muted-foreground bg-muted/30 p-2 rounded">
                                         <span>Packed: <strong className="text-foreground">{p.totalPacked}</strong></span>
                                         <span>Sold: <strong className="text-foreground">{p.totalSold}</strong></span>
-                                        <span>Left: <strong className={p.remaining < 20 ? "text-warning" : "text-success"}>{p.remaining}</strong></span>
+                                        <span>Left: <strong className={p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}>{p.remaining}</strong></span>
                                     </div>
                                 </div>
                             ))}
@@ -747,9 +753,13 @@ export default function Inventory() {
                                             </td>
                                             <td className="px-4 py-3 text-right text-foreground">{p.totalPacked}</td>
                                             <td className="px-4 py-3 text-right text-foreground">{p.totalSold}</td>
-                                            <td className={`px-4 py-3 text-right font-bold ${p.remaining < 20 ? "text-warning" : "text-success"}`}>{p.remaining}</td>
+                                            <td className={`px-4 py-3 text-right font-bold ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>{p.remaining}</td>
                                             <td className="px-4 py-3 text-center">
-                                                {p.remaining < 20 ? (
+                                                {p.remaining === 0 ? (
+                                                    <span className="inline-flex items-center gap-1 text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">
+                                                        <XCircle className="h-3 w-3" /> No Stock
+                                                    </span>
+                                                ) : p.remaining < 200 ? (
                                                     <span className="inline-flex items-center gap-1 text-xs bg-warning/10 text-warning px-2 py-0.5 rounded-full font-medium">
                                                         <AlertTriangle className="h-3 w-3" /> Low Stock
                                                     </span>

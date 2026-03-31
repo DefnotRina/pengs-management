@@ -4,13 +4,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Plus, User, Banknote, Pencil, Check, X, History, Trash2 } from "lucide-react";
+import { Plus, User, Banknote, Pencil, Check, X, History, Trash2, Archive, Activity, UserMinus, AlertCircle, Ban, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { Badge } from "@/components/ui/badge";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel
+} from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useAuth } from "@/contexts/AuthContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 
 const formatCurrency = (v: number) => `₱${(Number(v) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const PIECE_RATE_KEY = 'peng_piece_rate';
@@ -37,6 +48,9 @@ export default function Employees() {
   const [empRole, setEmpRole] = useState("");
   const [payType, setPayType] = useState("pay per output");
   const [baseSalary, setBaseSalary] = useState("");
+
+  // Status Management
+  const [statusTab, setStatusTab] = useState("Active");
 
   // CA Modal
   const [caModalOpen, setCaModalOpen] = useState(false);
@@ -72,10 +86,10 @@ export default function Employees() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Only count PENDING advances for the balance display
+  // Count PENDING and PARTIALLY DEDUCTED advances for the balance display
   const getCaBalance = (empName: string) =>
     advances
-      .filter(a => a.employee_name === empName && a.status !== 'Deducted' && Number(a.amount) > 0)
+      .filter(a => a.employee_name === empName && a.status !== 'Deducted' && a.status !== 'Written-off' && Number(a.amount) > 0)
       .reduce((sum, a) => sum + Number(a.amount), 0);
 
   const handleAddEmployee = async (e: React.FormEvent) => {
@@ -86,7 +100,8 @@ export default function Employees() {
       names: names.trim(),
       role: empRole.trim(),
       pay_type: payType,
-      base_salary: payType !== 'pay per output' ? Number(baseSalary || 0) : null
+      base_salary: payType !== 'pay per output' ? Number(baseSalary || 0) : null,
+      status: 'Active'
     });
     setSaving(false);
     if (error) { toast.error("Failed to add employee"); console.error(error); }
@@ -160,6 +175,68 @@ export default function Employees() {
               else { toast.success("Advance deleted!"); fetchData(); }
           }
       });
+  };
+
+  const handleUpdateStatus = async (emp: any, newStatus: string) => {
+    const bal = getCaBalance(emp.names);
+    
+    const proceedUpdate = async (extraActions: () => Promise<void> = async () => {}) => {
+        setSaving(true);
+        const { error } = await supabase.from('employees').update({ 
+            status: newStatus,
+            status_date: new Date().toISOString() 
+        }).eq('id', emp.id);
+        
+        if (error) { toast.error(`Failed to update to ${newStatus}`); }
+        else {
+            await extraActions();
+            toast.success(`Employee marked as ${newStatus}`);
+            fetchData();
+        }
+        setSaving(false);
+        setConfirmConfig(prev => ({ ...prev, open: false }));
+    };
+
+    if ((newStatus === 'On Leave' || newStatus === 'Inactive') && bal > 0) {
+        setConfirmConfig({
+            open: true,
+            title: `Manage Unpaid Balance?`,
+            message: `${emp.names} has an unpaid balance of ${formatCurrency(bal)}. What would you like to do?`,
+            onConfirm: () => proceedUpdate() // Default proceed (keep history)
+        });
+        return;
+    }
+
+    proceedUpdate();
+  };
+
+  const handleWriteOff = async (empName: string) => {
+    const bal = getCaBalance(empName);
+    if (bal <= 0) return;
+
+    setConfirmConfig({
+        open: true,
+        title: "Write-off Debt?",
+        message: `This will clear the ${formatCurrency(bal)} active balance for ${empName} and record it as a write-off. The history will remain visible.`,
+        onConfirm: async () => {
+            setSaving(true);
+            // 1. Mark existing pending advances as 'Written-off'
+            const { error: caErr } = await supabase
+                .from('cash_advances')
+                .update({ status: 'Written-off' })
+                .eq('employee_name', empName)
+                .eq('status', 'Pending');
+
+            if (caErr) {
+                toast.error("Failed to write off advances");
+            } else {
+                toast.success("Debt written off successfully");
+                fetchData();
+            }
+            setSaving(false);
+            setConfirmConfig(prev => ({ ...prev, open: false }));
+        }
+    });
   };
 
   return (
@@ -271,17 +348,46 @@ export default function Employees() {
       </Dialog>
 
       {/* Employee Roster */}
-      <div className="bg-card rounded-lg border shadow-sm">
-        <div className="p-4 border-b border-border bg-muted/30">
-          <h2 className="text-sm font-semibold text-foreground">Active Employees & Balances</h2>
+      <Tabs value={statusTab} onValueChange={setStatusTab} className="space-y-4">
+        <div className="flex justify-between items-center bg-card rounded-lg border p-1 shadow-sm overflow-x-auto">
+          <TabsList className="w-full justify-start bg-transparent h-9 md:h-11">
+            <TabsTrigger value="Active" className="text-xs md:text-sm px-4 data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold transition-all">
+                Active Staff ({employees.filter(e => (e.status || 'Active') === 'Active').length})
+            </TabsTrigger>
+            <TabsTrigger value="On Leave" className="text-xs md:text-sm px-4 data-[state=active]:bg-warning/10 data-[state=active]:text-warning font-bold transition-all">
+                On Leave ({employees.filter(e => e.status === 'On Leave').length})
+            </TabsTrigger>
+            <TabsTrigger value="Inactive" className="text-xs md:text-sm px-4 data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive font-bold transition-all">
+                Archive ({employees.filter(e => e.status === 'Inactive' || e.status === 'Resigned').length})
+            </TabsTrigger>
+          </TabsList>
         </div>
-        {isLoading ? (
-          <p className="text-center text-sm text-muted-foreground py-10">Loading...</p>
-        ) : employees.length === 0 ? (
-          <p className="text-center text-sm text-muted-foreground py-10">No employees found.</p>
-        ) : (
-          <div className="divide-y divide-border">
-            {employees.map((emp) => {
+
+        <TabsContent value={statusTab} className="mt-0">
+          <div className="bg-card rounded-lg border shadow-sm">
+            <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-foreground">
+                {statusTab === 'Active' ? "Active Team" : statusTab === 'On Leave' ? "Staff Away" : "Archived Records"}
+              </h2>
+              {statusTab === 'Inactive' && <p className="text-[10px] text-muted-foreground uppercase font-medium">History Preserved</p>}
+            </div>
+            {isLoading ? (
+              <p className="text-center text-sm text-muted-foreground py-10">Loading...</p>
+            ) : employees.filter(e => {
+                const s = e.status || 'Active';
+                if (statusTab === 'Active') return s === 'Active';
+                if (statusTab === 'On Leave') return s === 'On Leave';
+                return s === 'Inactive' || s === 'Resigned';
+            }).length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-10">No employees in this category.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {employees.filter(e => {
+                    const s = e.status || 'Active';
+                    if (statusTab === 'Active') return s === 'Active';
+                    if (statusTab === 'On Leave') return s === 'On Leave';
+                    return s === 'Inactive' || s === 'Resigned';
+                }).map((emp) => {
               const bal = getCaBalance(emp.names);
               const isEditingThis = editingEmpId === emp.id;
               const isFixed = !emp.pay_type?.toLowerCase().includes('output');
@@ -299,11 +405,21 @@ export default function Employees() {
                           <span className="text-[10px] font-medium bg-muted px-2 py-0.5 rounded capitalize text-muted-foreground">
                             {emp.pay_type}
                           </span>
+                          {emp.status && emp.status !== 'Active' && (
+                            <Badge variant={emp.status === 'On Leave' ? 'warning' : 'destructive'} className="text-[8px] h-4 py-0 leading-none">
+                                {emp.status}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {emp.role}
                           {isFixed && emp.base_salary ? ` · ₱${emp.base_salary.toLocaleString()}` : ""}
                           {!isFixed ? ` · ₱${pieceRate}/unit` : ""}
+                          {emp.status_date && emp.status !== 'Active' && (
+                            <span className="text-primary font-medium">
+                                {` · ${emp.status === 'On Leave' ? 'Away' : 'Archived'} since ${new Date(emp.status_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -345,10 +461,49 @@ export default function Employees() {
                     </div>
 
                     {role === 'admin' && (
-                      <Button variant="outline" size="sm" className="touch-target h-8 px-3 text-xs font-medium border-primary/20 hover:bg-primary/5 shadow-sm"
-                        onClick={() => { setSelectedEmp(emp.names); setCaAmount(""); setCaNote(""); setCaDate(new Date().toISOString().split("T")[0]); setEditingCaId(null); setCaModalOpen(true); }}>
-                        <Banknote className="h-3.5 w-3.5 mr-1.5 text-primary" /> Advance
-                      </Button>
+                      <div className="flex items-center gap-1.5">
+                        <Button variant="outline" size="sm" className="touch-target h-8 px-3 text-xs font-medium border-primary/20 hover:bg-primary/5 shadow-sm ml-1"
+                            onClick={() => { setSelectedEmp(emp.names); setCaAmount(""); setCaNote(""); setCaDate(new Date().toISOString().split("T")[0]); setEditingCaId(null); setCaModalOpen(true); }}>
+                            <Banknote className="h-3.5 w-3.5 mr-1.5 text-primary" /> Advance
+                        </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuLabel>Staff Actions</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                
+                                {statusTab === 'Active' ? (
+                                    <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'On Leave')} className="text-warning focus:text-warning gap-2 cursor-pointer">
+                                        <Archive className="h-4 w-4" /> On leave
+                                    </DropdownMenuItem>
+                                ) : (
+                                    <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'Active')} className="text-success focus:text-success gap-2 cursor-pointer">
+                                        <Activity className="h-4 w-4" /> Reactivate Staff
+                                    </DropdownMenuItem>
+                                )}
+
+                                {statusTab !== 'Inactive' && (
+                                    <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'Inactive')} className="text-destructive focus:text-destructive gap-2 cursor-pointer">
+                                        <UserMinus className="h-4 w-4" /> Resign / Inactive
+                                    </DropdownMenuItem>
+                                )}
+
+                                {statusTab === 'Inactive' && bal > 0 && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => handleWriteOff(emp.names)} className="text-destructive focus:bg-destructive/10 font-bold gap-2 cursor-pointer">
+                                            <Ban className="h-4 w-4" /> Write-off Debt
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -357,6 +512,8 @@ export default function Employees() {
           </div>
         )}
       </div>
+    </TabsContent>
+  </Tabs>
 
       {/* Cash Advance History */}
       <div className="bg-card rounded-lg border shadow-sm">
@@ -399,7 +556,11 @@ export default function Employees() {
                     </div>
                     <div className="flex items-center gap-3">
                         <span className="text-sm font-bold text-destructive">{formatCurrency(ca.amount)}</span>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded uppercase ${ca.status === 'Deducted' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded uppercase ${
+                            ca.status === 'Deducted' ? 'bg-success/10 text-success' : 
+                            ca.status === 'Partially Deducted' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' :
+                            ca.status === 'Written-off' ? 'bg-purple-100 text-purple-700' :
+                            'bg-warning/10 text-warning'}`}>
                         {ca.status}
                         </span>
                     </div>
@@ -414,11 +575,18 @@ export default function Employees() {
       {/* Custom Safety Confirmation Modal */}
       <Dialog open={confirmConfig.open} onOpenChange={(open) => setConfirmConfig(prev => ({ ...prev, open }))}>
           <DialogContent className="sm:max-w-[380px] p-0 overflow-hidden border-none shadow-2xl rounded-2xl animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-destructive/10 p-6 flex flex-col items-center text-center space-y-3">
+               <div className={`${confirmConfig.title.toLowerCase().includes('write') ? 'bg-purple-100' : 'bg-destructive/10'} p-6 flex flex-col items-center text-center space-y-3`}>
                   <div className="bg-white p-3 rounded-full shadow-sm">
-                      <Trash2 className="h-6 w-6 text-destructive" />
+                      {confirmConfig.title.toLowerCase().includes('balance') ? <AlertCircle className="h-6 w-6 text-warning" /> :
+                       confirmConfig.title.toLowerCase().includes('write') ? <Ban className="h-6 w-6 text-purple-600" /> :
+                       <Trash2 className="h-6 w-6 text-destructive" />}
                   </div>
-                  <h3 className="text-lg font-black text-destructive uppercase tracking-tight">{confirmConfig.title}</h3>
+                  <h3 className={`text-lg font-black uppercase tracking-tight ${
+                      confirmConfig.title.toLowerCase().includes('balance') ? 'text-warning' : 
+                      confirmConfig.title.toLowerCase().includes('write') ? 'text-purple-700' : 
+                      'text-destructive'}`}>
+                    {confirmConfig.title}
+                  </h3>
                   <p className="text-xs text-muted-foreground font-medium leading-relaxed">
                       {confirmConfig.message}
                   </p>
