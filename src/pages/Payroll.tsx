@@ -223,7 +223,14 @@ export default function Payroll() {
   };
 
   const addCustomDeduction = () => {
-      if (!newDedLabel.trim() || !newDedAmount || Number(newDedAmount) <= 0) return;
+      if (!newDedLabel.trim()) {
+          toast.error("Please fill in a label for the deduction.");
+          return;
+      }
+      if (!newDedAmount || Number(newDedAmount) <= 0) {
+          toast.error("Please enter a valid amount for the deduction.");
+          return;
+      }
       setCustomDeductions([...customDeductions, { label: newDedLabel.trim(), amount: Number(newDedAmount) }]);
       setNewDedLabel("");
       setNewDedAmount("");
@@ -234,7 +241,14 @@ export default function Payroll() {
   };
 
   const addBonus = () => {
-      if (!newBonusLabel.trim() || !newBonusAmount || Number(newBonusAmount) <= 0) return;
+      if (!newBonusLabel.trim()) {
+          toast.error("Please fill in a label for the bonus.");
+          return;
+      }
+      if (!newBonusAmount || Number(newBonusAmount) <= 0) {
+          toast.error("Please enter a valid amount for the bonus.");
+          return;
+      }
       setBonuses([...bonuses, { label: newBonusLabel.trim(), amount: Number(newBonusAmount) }]);
       setNewBonusLabel("");
       setNewBonusAmount("");
