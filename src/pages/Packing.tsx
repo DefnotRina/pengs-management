@@ -245,7 +245,7 @@ export default function Packing() {
                 <Select value={packSize} onValueChange={setPackSize} required>
                   <SelectTrigger className="text-xs h-9 md:h-10 touch-target transition-all"><SelectValue placeholder="Pick Product" /></SelectTrigger>
                   <SelectContent>
-                    {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map((p) => (
+                    {PRODUCTS.filter(p => p.group !== "Barquillon Classic" && p.group !== "Barquillon Flavors").map((p) => (
                       <SelectItem key={p.name} value={p.name} className="text-xs pl-3">{p.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -493,7 +493,7 @@ export default function Packing() {
                             <Select value={editSize} onValueChange={setEditSize}>
                                 <SelectTrigger className="h-10 text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map((p) => <SelectItem key={p.name} value={p.name} className="text-xs pl-3">{p.name}</SelectItem>)}
+                                    {PRODUCTS.filter(p => p.group !== "Barquillon Classic" && p.group !== "Barquillon Flavors").map((p) => <SelectItem key={p.name} value={p.name} className="text-xs pl-3">{p.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
