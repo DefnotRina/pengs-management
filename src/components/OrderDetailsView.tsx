@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Plus, Trash2, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,7 @@ export interface OrderDetailsViewProps {
   };
 }
 
-export const OrderDetailsView = ({
+export const OrderDetailsView = memo(({
   order: o,
   role,
   payments,
@@ -313,4 +314,4 @@ export const OrderDetailsView = ({
       </div>
     </div>
   );
-};
+});
