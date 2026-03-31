@@ -30,8 +30,8 @@ export default function Payroll() {
   // Date Range State: Default to current week (Mon-Sun)
   const [baseDate, setBaseDate] = useState(new Date());
   
-  const weekStart = format(startOfWeek(baseDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
-  const weekEnd = format(endOfWeek(baseDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
+  const weekStart = format(startOfWeek(baseDate, { weekStartsOn: 0 }), "yyyy-MM-dd");
+  const weekEnd = format(endOfWeek(baseDate, { weekStartsOn: 0 }), "yyyy-MM-dd");
 
   const handlePrevWeek = () => setBaseDate(prev => subDays(prev, 7));
   const handleNextWeek = () => setBaseDate(prev => addDays(prev, 7));
@@ -536,9 +536,9 @@ export default function Payroll() {
             <div className="flex flex-col items-center md:items-start">
                 <span className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-1">Payroll Period</span>
                 <h2 className="text-sm md:text-lg font-bold text-foreground flex items-center gap-2">
-                    {formatDate(startOfWeek(baseDate, { weekStartsOn: 1 }))}
+                    {formatDate(startOfWeek(baseDate, { weekStartsOn: 0 }))}
                     <span className="text-muted-foreground font-medium">—</span>
-                    {formatDate(endOfWeek(baseDate, { weekStartsOn: 1 }))}
+                    {formatDate(endOfWeek(baseDate, { weekStartsOn: 0 }))}
                 </h2>
             </div>
             
