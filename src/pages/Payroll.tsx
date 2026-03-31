@@ -45,6 +45,10 @@ export default function Payroll() {
   const [customDeductions, setCustomDeductions] = useState<{label: string, amount: number}[]>([]);
   const [newDedLabel, setNewDedLabel] = useState("");
   const [newDedAmount, setNewDedAmount] = useState("");
+  // Bonuses / Additional Income
+  const [bonuses, setBonuses] = useState<{label: string, amount: number}[]>([]);
+  const [newBonusLabel, setNewBonusLabel] = useState("");
+  const [newBonusAmount, setNewBonusAmount] = useState("");
   const [settling, setSettling] = useState(false);
   const [viewingReceipt, setViewingReceipt] = useState<any>(null);
   const [allCaData, setAllCaData] = useState<any[]>([]);
@@ -203,6 +207,9 @@ export default function Payroll() {
       setSelectedCaIds([]);
       setNewDedLabel("");
       setNewDedAmount("");
+      setBonuses([]);
+      setNewBonusLabel("");
+      setNewBonusAmount("");
       setPayslipModalOpen(true);
   };
 
@@ -224,6 +231,17 @@ export default function Payroll() {
 
   const removeDeduction = (idx: number) => {
       setCustomDeductions(customDeductions.filter((_, i) => i !== idx));
+  };
+
+  const addBonus = () => {
+      if (!newBonusLabel.trim() || !newBonusAmount || Number(newBonusAmount) <= 0) return;
+      setBonuses([...bonuses, { label: newBonusLabel.trim(), amount: Number(newBonusAmount) }]);
+      setNewBonusLabel("");
+      setNewBonusAmount("");
+  };
+
+  const removeBonus = (idx: number) => {
+      setBonuses(bonuses.filter((_, i) => i !== idx));
   };
 
   const handleSettle = async () => {
@@ -248,12 +266,13 @@ export default function Payroll() {
       ];
 
       const totalDed = combinedBreakdown.reduce((s, d) => s + Number(d.amount), 0);
+      const totalBonus = bonuses.reduce((s, b) => s + Number(b.amount), 0);
       const grossIncome = selectedEmp.pay_type?.toLowerCase().includes('output') 
           ? selectedEmp.computedPay 
           : Number(selectedEmp.base_salary || 0);
 
-      const actualDeduction = Math.min(grossIncome, totalDed);
-      const finalNetPay = Math.max(0, grossIncome - totalDed);
+      const actualDeduction = Math.min(grossIncome + totalBonus, totalDed);
+      const finalNetPay = Math.max(0, grossIncome + totalBonus - totalDed);
 
       // Generate Payslip Receipt with Breakdown JSON
       const { error: receiptErr } = await supabase.from('payroll_receipts').insert({
@@ -261,9 +280,10 @@ export default function Payroll() {
           week_start: weekStart,
           week_end: weekEnd,
           gross_income: grossIncome,
-          ca_deduction: actualDeduction, // Cap it for the record
-          net_total: finalNetPay, // Settle at 0
-          deductions_breakdown: combinedBreakdown // JSON column
+          ca_deduction: actualDeduction,
+          net_total: finalNetPay,
+          deductions_breakdown: combinedBreakdown,
+          bonuses_breakdown: bonuses // JSON column
       });
 
       if (receiptErr) {
@@ -323,7 +343,7 @@ export default function Payroll() {
           runningIncome = Math.max(0, runningIncome - amountCovered);
       }
 
-      if (totalDed > grossIncome) {
+      if (totalDed > grossIncome + totalBonus) {
           toast.warning(`Net pay was negative. Remaining balances were automatically carried over with original dates.`);
       } else {
           toast.success(`Payslip generated for ${selectedEmp.names}`);
@@ -332,6 +352,7 @@ export default function Payroll() {
       setSettling(false);
       setPayslipModalOpen(false);
       setSelectedCaIds([]);
+      setBonuses([]);
       fetchPayroll();
   };
 
@@ -341,12 +362,13 @@ export default function Payroll() {
       .reduce((s, ca) => s + Number(ca.amount), 0);
 
   const currentTotalDeductions = selectedCaAmountTotal + customDeductions.reduce((s, d) => s + Number(d.amount), 0);
+  const currentTotalBonuses = bonuses.reduce((s, b) => s + Number(b.amount), 0);
   const currentGross = selectedEmp 
       ? (selectedEmp.pay_type?.toLowerCase().includes('output') 
           ? selectedEmp.computedPay 
           : Number(selectedEmp.base_salary || 0))
       : 0;
-  const currentNetPay = currentGross - currentTotalDeductions;
+  const currentNetPay = currentGross + currentTotalBonuses - currentTotalDeductions;
 
   // REUSABLE RECEIPT TEMPLATE FOR CLEAN RENDERING
   const ReceiptTemplate = ({ id, empData, receiptData, entries }: any) => (
@@ -430,6 +452,23 @@ export default function Payroll() {
                             <span className="font-bold text-gray-600" style={{ fontSize: '12px' }}>GROSS INCOME</span>
                             <span className="font-bold text-black" style={{ fontSize: '12px' }}>{formatCurrency(receiptData.gross_income)}</span>
                         </div>
+
+                      {/* Bonuses on Receipt */}
+                      {receiptData.bonuses_breakdown?.length > 0 && (
+                          <div className="pt-1">
+                              <span className="font-bold text-gray-600 pb-1 mb-2 inline-block w-full text-xs">BONUSES</span>
+                              {receiptData.bonuses_breakdown.map((bonus: any, i: number) => (
+                                  <div key={i} className="flex justify-between text-xs mb-1.5 px-1 bg-green-50/40 rounded py-0.5">
+                                      <span className="text-gray-600 font-medium">{bonus.label}</span>
+                                      <span className="text-green-600 font-bold">+₱{Number(bonus.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                              ))}
+                              <div className="flex justify-between text-xs font-bold mt-1 pt-1 border-t border-gray-200 px-1">
+                                  <span>TOTAL BONUSES</span>
+                                  <span className="text-green-600">+{formatCurrency(receiptData.bonuses_breakdown.reduce((s: number, b: any) => s + Number(b.amount), 0))}</span>
+                              </div>
+                          </div>
+                      )}
                       
                       <div className="pt-2">
                           <span className="font-bold text-gray-600 pb-1 mb-2 inline-block w-full text-xs">DEDUCTIONS</span>
@@ -449,7 +488,7 @@ export default function Payroll() {
                           </div>
 
                           {/* Show Carry Over if pay was capped */}
-                          {receiptData.gross_income < receiptData.deductions_breakdown?.reduce((s: number, d: any) => s + Number(d.amount), 0) && (
+                          {receiptData.gross_income + (receiptData.bonuses_breakdown?.reduce((s: number, b: any) => s + Number(b.amount), 0) || 0) < receiptData.deductions_breakdown?.reduce((s: number, d: any) => s + Number(d.amount), 0) && (
                               <div className="flex justify-between text-[11px] font-bold text-orange-600 bg-orange-50 mt-1 px-1 py-1 rounded">
                                   <span className="italic">CARRY OVER DEBT:</span>
                                   <span>{formatCurrency(receiptData.deductions_breakdown?.reduce((s: number, d: any) => s + Number(d.amount), 0) - receiptData.gross_income)}</span>
@@ -611,6 +650,50 @@ export default function Payroll() {
                                 </div>
                             </div>
                         )}
+
+                        {/* Bonuses Builder */}
+                        <div>
+                            <h3 className="text-[11px] md:text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2 md:mb-3 flex justify-between">
+                                <span>Bonuses / Additional</span>
+                                {currentTotalBonuses > 0 && <span className="text-green-600">+{formatCurrency(currentTotalBonuses)}</span>}
+                            </h3>
+                            <div className="space-y-1.5 md:space-y-2 mb-3">
+                                {bonuses.map((bonus, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center">
+                                        <Input
+                                            value={bonus.label}
+                                            onChange={e => {
+                                                const updated = [...bonuses];
+                                                updated[idx].label = e.target.value;
+                                                setBonuses(updated);
+                                            }}
+                                            className="h-8 md:h-9 text-xs md:text-sm touch-target"
+                                            placeholder="e.g. Performance Bonus"
+                                        />
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            value={bonus.amount || ""}
+                                            onChange={e => {
+                                                const updated = [...bonuses];
+                                                updated[idx].amount = Number(e.target.value);
+                                                setBonuses(updated);
+                                            }}
+                                            className="h-8 md:h-9 text-xs md:text-sm touch-target w-20 md:w-28 text-right"
+                                            placeholder="₱0.00"
+                                        />
+                                        <Button variant="ghost" size="icon" onClick={() => removeBonus(idx)} className="h-8 w-8 md:h-9 md:w-9 text-destructive touch-target shrink-0">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex gap-1.5 md:gap-2">
+                                <Input value={newBonusLabel} onChange={e => setNewBonusLabel(e.target.value)} placeholder="e.g. Performance Bonus" className="h-8 md:h-9 text-xs md:text-sm grow" />
+                                <Input type="number" min="0" value={newBonusAmount} onChange={e => setNewBonusAmount(e.target.value)} placeholder="0.00" className="h-8 md:h-9 text-xs md:text-sm w-20 md:w-24 text-right" />
+                                <Button onClick={addBonus} variant="secondary" className="h-8 md:h-9 px-2.5 md:px-3 shrink-0"><Plus className="h-4 w-4" /></Button>
+                            </div>
+                        </div>
 
                         {/* Deductions Builder */}
                         <div>
