@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { PageHeader } from "@/components/StatCard";
+import { PageHeader, StatCard } from "@/components/StatCard";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EXPENSE_CATEGORIES } from "@/lib/mock-data";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Wallet, ShoppingBag, Settings, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -33,6 +33,7 @@ export default function Expenses() {
         item: "", 
         qty: "1", 
         unit: "", 
+        price: "",
         amount: "" 
     }]);
     const [editOpen, setEditOpen] = useState(false);
@@ -76,13 +77,16 @@ export default function Expenses() {
             return;
         }
 
+        const batchId = crypto.randomUUID().slice(0, 8);
+
         const toInsert = validEntries.map(e => ({
             date: e.date,
             category: e.category,
             item: e.item,
             amount: Number(e.amount),
             qty: Number(e.qty || 1),
-            unit: e.unit
+            unit: e.unit,
+            batch_id: batchId
         }));
         
         const { error } = await supabase.from('expenses').insert(toInsert);
@@ -98,6 +102,7 @@ export default function Expenses() {
                 item: "", 
                 qty: "1", 
                 unit: "", 
+                price: "",
                 amount: "" 
             }]);
             setOpen(false);
@@ -107,7 +112,7 @@ export default function Expenses() {
 
     const addEntryRow = () => {
         const lastDate = entries[entries.length - 1]?.date || new Date().toISOString().split("T")[0];
-        setEntries([...entries, { date: lastDate, category: "Operational", item: "", qty: "1", unit: "", amount: "" }]);
+        setEntries([...entries, { date: lastDate, category: "Operational", item: "", qty: "1", unit: "", price: "", amount: "" }]);
     };
 
     const removeEntryRow = (idx: number) => {
@@ -120,6 +125,24 @@ export default function Expenses() {
         const updated = [...entries];
         updated[idx] = { ...updated[idx], [field]: value };
         
+        // Auto-calculate Total (Amount) if Qty or Price changes
+        if (field === "qty" || field === "price") {
+            const q = Number(updated[idx].qty) || 0;
+            const p = Number(updated[idx].price) || 0;
+            if (q > 0 && p > 0) {
+                updated[idx].amount = (q * p).toString();
+            }
+        }
+        
+        // Auto-calculate Price if Amount changes
+        if (field === "amount") {
+            const q = Number(updated[idx].qty) || 0;
+            const a = Number(value) || 0;
+            if (q > 0) {
+                updated[idx].price = (a / q).toFixed(2);
+            }
+        }
+
         // Smart unit/item handling
         if (field === "item" && updated[idx].category === "Raw Ingredients") {
             const ingredient = RAW_INGREDIENTS.find(ri => ri.name === value);
@@ -138,6 +161,27 @@ export default function Expenses() {
     };
 
     const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0);
+    
+    const totalsByCategory = EXPENSE_CATEGORIES.reduce((acc, cat) => {
+        acc[cat] = expenses
+            .filter(e => e.category === cat)
+            .reduce((s, e) => s + Number(e.amount), 0);
+        return acc;
+    }, {} as Record<string, number>);
+
+    const groupedExpenses = expenses.reduce((groups, expense) => {
+        const key = expense.batch_id || expense.date;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(expense);
+        return groups;
+    }, {} as Record<string, any[]>);
+
+    const sortedKeys = Object.keys(groupedExpenses).sort((a, b) => {
+        const dateA = groupedExpenses[a][0].date;
+        const dateB = groupedExpenses[b][0].date;
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+        return (groupedExpenses[b][0].created_at || "").localeCompare(groupedExpenses[a][0].created_at || "");
+    });
 
     const [saving, setSaving] = useState(false);
 
@@ -183,8 +227,29 @@ export default function Expenses() {
 
     const openEdit = (exp: any) => {
         setEditingExpense(exp);
-        setEditData({ ...exp });
+        const qty = Number(exp.qty) || 1;
+        const amount = Number(exp.amount) || 0;
+        setEditData({ ...exp, price: (amount / qty).toFixed(2) });
         setEditOpen(true);
+    };
+
+    const updateEditData = (field: string, value: string) => {
+        const newData = { ...editData, [field]: value };
+        if (field === "qty" || field === "price") {
+            const q = Number(newData.qty) || 0;
+            const p = Number(newData.price) || 0;
+            if (q > 0 && p > 0) {
+                newData.amount = (q * p).toString();
+            }
+        }
+        if (field === "amount") {
+            const q = Number(newData.qty) || 0;
+            const a = Number(value) || 0;
+            if (q > 0) {
+                newData.price = (a / q).toFixed(2);
+            }
+        }
+        setEditData(newData);
     };
 
     return (
@@ -236,7 +301,6 @@ export default function Expenses() {
                                                 )}
                                             </div>
                                         </div>
-
                                         <div className="grid grid-cols-3 gap-3">
                                             <div>
                                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Qty</label>
@@ -257,9 +321,14 @@ export default function Expenses() {
                                                 )}
                                             </div>
                                             <div>
-                                                <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Amount</label>
-                                                <Input type="number" value={entry.amount} onChange={(e) => updateEntry(idx, "amount", e.target.value)} placeholder="₱" className="h-8 text-xs font-bold" required />
+                                                <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Price</label>
+                                                <Input type="number" value={entry.price} onChange={(e) => updateEntry(idx, "price", e.target.value)} placeholder="₱" className="h-8 text-xs" />
                                             </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                                            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Line Total</span>
+                                            <span className="text-xs font-black text-destructive">{formatCurrency(Number(entry.amount || 0))}</span>
                                         </div>
 
                                         {entries.length > 1 && (
@@ -273,6 +342,18 @@ export default function Expenses() {
                                         )}
                                     </div>
                                 ))}
+
+
+
+                                <div className="p-3 bg-muted/40 rounded-xl border border-dashed flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <p className="text-[10px] uppercase font-black text-muted-foreground tracking-tighter">Grand Total</p>
+                                        <p className="text-xs text-muted-foreground font-medium">{entries.length} Items</p>
+                                    </div>
+                                    <p className="text-xl font-black text-primary">
+                                        {formatCurrency(entries.reduce((s, e) => s + Number(e.amount || 0), 0))}
+                                    </p>
+                                </div>
 
                                 <div className="flex gap-2">
                                     <Button type="button" variant="outline" onClick={addEntryRow} className="flex-1 h-8 text-xs">
@@ -288,106 +369,129 @@ export default function Expenses() {
                 )}
             </PageHeader>
 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {EXPENSE_CATEGORIES.map(cat => (
+                    <StatCard 
+                        key={cat}
+                        label={cat} 
+                        value={formatCurrency(totalsByCategory[cat] || 0)} 
+                        icon={cat === "Operational" ? Settings : cat === "Raw Ingredients" ? ShoppingBag : Wallet} 
+                        variant={cat === "Operational" ? "warning" : cat === "Raw Ingredients" ? "success" : "default"}
+                    />
+                ))}
+            </div>
+
             <div className="bg-card rounded-lg border shadow-sm">
                 <div className="p-4 border-b border-border flex items-center justify-between bg-muted/30">
-                    <h2 className="text-sm font-semibold text-foreground">Expense History</h2>
-                    <span className="text-sm font-bold text-destructive">Total: {formatCurrency(totalExpenses)}</span>
+                    <h2 className="text-sm font-semibold text-foreground flex items-center">
+                        <Calendar className="h-4 w-4 mr-2 text-primary" /> Expense History
+                    </h2>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{expenses.length} Records</span>
                 </div>
                 {isLoading ? (
                      <p className="text-center text-sm text-muted-foreground py-10">Loading expenses...</p>
                 ) : expenses.length === 0 ? (
                      <p className="text-center text-sm text-muted-foreground py-10">No expenses recorded.</p>
                 ) : (
-                    <>
-                        {/* Mobile cards */}
-                        <div className="md:hidden divide-y divide-border">
-                            {expenses.map((e, i) => (
-                                <div key={e.id} className="relative overflow-hidden group">
-                                    {/* Actions (Hidden behind) */}
-                                    {isEditMode && (
-                                        <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
-                                            {role !== 'viewer' && (
-                                                <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                            )}
-                                            {role === 'admin' && (
-                                                <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Main Content */}
-                                    <div className={`p-4 flex items-center justify-between gap-3 bg-card transition-transform duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-28' : ''}`}>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-foreground">{e.item}</p>
-                                            <p className="text-xs text-muted-foreground">{e.date} · {e.category}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-bold text-destructive">{formatCurrency(Number(e.amount))}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        {/* Desktop grid list */}
-                        <div className="hidden md:block">
-                            {/* Header */}
-                            <div className="grid grid-cols-6 gap-4 px-4 py-3 text-muted-foreground bg-muted/10 border-b border-border text-[10px] uppercase font-bold tracking-wider">
-                                <div>Date</div>
-                                <div>Category</div>
-                                <div className="col-span-2">Item</div>
-                                <div className="text-center">Qty/Unit</div>
-                                <div className="text-right">Amount</div>
-                            </div>
-                            
-                            {/* Rows */}
-                            <div className="divide-y divide-border">
-                                {expenses.map((e, i) => (
-                                    <div key={e.id || i} className="relative overflow-hidden group">
-                                        {/* Actions (Hidden behind) */}
-                                        {isEditMode && (
-                                            <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
-                                                {role !== 'viewer' && (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                                {role === 'admin' && (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Row Content */}
-                                        <div className={`grid grid-cols-6 gap-4 px-4 py-3 items-center bg-card transition-all duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-24' : ''}`}>
-                                            <div className="text-[10px] text-foreground uppercase font-mono">{e.date}</div>
-                                            <div>
-                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                                                    e.category === "Raw Ingredients" ? "bg-orange-100 text-orange-700" :
-                                                    e.category === "Operational" ? "bg-blue-100 text-blue-700" :
-                                                    "bg-green-100 text-green-700"
-                                                }`}>
-                                                    {e.category}
+                    <div className="divide-y divide-border">
+                        {sortedKeys.map((key) => {
+                            const dateExpenses = groupedExpenses[key];
+                            const firstItem = dateExpenses[0];
+                            const isBatch = !!firstItem.batch_id;
+                            return (
+                                <div key={key}>
+                                    <div className="bg-muted/10 px-4 py-2 border-y border-border/50">
+                                        <h3 className="text-[10px] uppercase font-black text-muted-foreground tracking-widest flex items-center">
+                                            <Calendar className="h-3 w-3 mr-1.5 opacity-50" /> 
+                                            {new Date(firstItem.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                            {firstItem.created_at && (
+                                                <span className="ml-2 text-[8px] opacity-40 font-mono lowercase tracking-normal">
+                                                    at {new Date(firstItem.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </span>
-                                            </div>
-                                            <div className="col-span-2 text-xs font-bold text-foreground">{e.item}</div>
-                                            <div className="text-center text-[10px] text-muted-foreground uppercase font-medium">
-                                                {e.qty} {e.unit}
-                                            </div>
-                                            <div className="text-right text-sm font-black text-destructive">
-                                                {formatCurrency(Number(e.amount))}
+                                            )}
+                                            <span className="ml-auto bg-background px-2 py-0.5 rounded-full border border-border/40 font-mono">Total: {formatCurrency(dateExpenses.reduce((s, e) => s + Number(e.amount), 0))}</span>
+                                        </h3>
+                                    </div>
+
+                                {/* Mobile cards */}
+                                <div className="md:hidden divide-y divide-border/50">
+                                    {dateExpenses.map((e) => (
+                                        <div key={e.id} className="relative overflow-hidden group">
+                                            {/* Actions */}
+                                            {isEditMode && (
+                                                <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
+                                                    {role !== 'viewer' && (
+                                                        <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                    {role === 'admin' && (
+                                                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {/* Content */}
+                                            <div className={`p-4 flex items-center justify-between gap-3 bg-card transition-transform duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-28' : ''}`}>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold text-foreground">{e.item}</p>
+                                                    <p className="text-[10px] text-muted-foreground uppercase font-medium">{e.category} · {e.qty} {e.unit}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-black text-destructive">{formatCurrency(Number(e.amount))}</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+
+                                {/* Desktop list */}
+                                <div className="hidden md:block">
+                                    {dateExpenses.map((e) => (
+                                        <div key={e.id} className="relative overflow-hidden group border-b border-border last:border-b-0">
+                                            {/* Actions */}
+                                            {isEditMode && (
+                                                <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
+                                                    {role !== 'viewer' && (
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                    {role === 'admin' && (
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {/* Row Content */}
+                                            <div className={`grid grid-cols-6 gap-4 px-4 py-3 items-center bg-card transition-all duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-24' : ''}`}>
+                                                <div className="text-[10px] text-foreground uppercase font-mono">{e.date}</div>
+                                                <div>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                                        e.category === "Raw Ingredients" ? "bg-orange-100 text-orange-700" :
+                                                        e.category === "Operational" ? "bg-blue-100 text-blue-700" :
+                                                        "bg-green-100 text-green-700"
+                                                    }`}>
+                                                        {e.category}
+                                                    </span>
+                                                </div>
+                                                <div className="col-span-2 text-xs font-bold text-foreground">{e.item}</div>
+                                                <div className="text-center text-[10px] text-muted-foreground uppercase font-medium">
+                                                    {e.qty} {e.unit}
+                                                </div>
+                                                <div className="text-right text-sm font-black text-destructive">
+                                                    {formatCurrency(Number(e.amount))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    </>
+                        );
+                    })}
+                    </div>
                 )}
             </div>
 
@@ -409,7 +513,7 @@ export default function Expenses() {
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label>
-                                    <Select value={editData.category} onValueChange={(v) => setEditData({...editData, category: v})}>
+                                    <Select value={editData.category} onValueChange={(v) => updateEditData("category", v)}>
                                         <SelectTrigger className="h-10 text-xs shadow-sm font-medium"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c} className="text-xs pl-3">{c}</SelectItem>)}
@@ -419,21 +523,26 @@ export default function Expenses() {
                             </div>
                             <div>
                                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Item</label>
-                                <Input value={editData.item} onChange={e => setEditData({...editData, item: e.target.value})} className="h-10 text-xs" required />
+                                <Input value={editData.item} onChange={e => updateEditData("item", e.target.value)} className="h-10 text-xs" required />
                             </div>
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Qty</label>
-                                    <Input type="number" step="any" value={editData.qty} onChange={e => setEditData({...editData, qty: e.target.value})} className="h-10 text-xs" />
+                                    <Input type="number" step="any" value={editData.qty} onChange={e => updateEditData("qty", e.target.value)} className="h-10 text-xs" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Unit</label>
-                                    <Input value={editData.unit} onChange={e => setEditData({...editData, unit: e.target.value})} className="h-10 text-xs" />
+                                    <Input value={editData.unit} onChange={e => updateEditData("unit", e.target.value)} className="h-10 text-xs" />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount</label>
-                                    <Input type="number" step="any" value={editData.amount} onChange={e => setEditData({...editData, amount: e.target.value})} className="h-10 text-xs" required />
+                                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Price</label>
+                                    <Input type="number" step="any" value={editData.price} onChange={e => updateEditData("price", e.target.value)} className="h-10 text-xs" />
                                 </div>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border border-border/50 shadow-inner">
+                                <span className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Total Amount</span>
+                                <span className="text-xl font-black text-destructive">{formatCurrency(Number(editData.amount || 0))}</span>
                             </div>
                             <Button disabled={saving} type="submit" className="w-full h-10">
                                 {saving ? "Saving..." : "Update Expense"}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/StatCard";
-import { AlertTriangle, PackageOpen, Trash2, Edit2, RefreshCw, Puzzle, XCircle } from "lucide-react";
+import { AlertTriangle, PackageOpen, Trash2, Edit2, RefreshCw, Puzzle, XCircle, Plus, History, Package } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { PACK_SIZES, PRODUCTS } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
@@ -53,8 +53,11 @@ export default function Inventory() {
 
     // Repack Form State
     const [repackSourceSize, setRepackSourceSize] = useState("");
-    const [repackTargetQty, setRepackTargetQty] = useState("");
     const [repackTargetSize, setRepackTargetSize] = useState("");
+    const [repackTargetQty, setRepackTargetQty] = useState("");
+    const [returnedAdjustments, setReturnedAdjustments] = useState<any[]>([]);
+    const [processingReturn, setProcessingReturn] = useState<any>(null);
+    const [crackedSticks, setCrackedSticks] = useState("");
 
     const fetchInventory = async () => {
         setIsLoading(true);
@@ -63,7 +66,7 @@ export default function Inventory() {
         const { data: convHistory } = await supabase
             .from('packing')
             .select('*')
-            .eq('cook_name', 'System/Packaging')
+            .in('cook_name', ['System/Packaging', 'System/Returns'])
             .order('created_at', { ascending: false });
             
         const { data: orderItemsData } = await supabase
@@ -126,6 +129,12 @@ export default function Inventory() {
             });
         }
 
+        const { data: adjData } = await supabase
+            .from('order_adjustments')
+            .select('*')
+            .eq('is_repacked', false)
+            .order('date', { ascending: false });
+
         const computedStock = Object.values(inventoryMap).map((inv: any) => ({
             ...inv,
             remaining: inv.totalPacked - inv.totalSold
@@ -135,6 +144,7 @@ export default function Inventory() {
         setUnpackedRegularSticks(totalUnpackedRegular);
         setUnpackedSmallSticks(totalUnpackedSmall);
         setConversions(convHistory || []);
+        setReturnedAdjustments(adjData || []);
         setIsLoading(false);
     };
 
@@ -205,70 +215,108 @@ export default function Inventory() {
             return;
         }
 
-        const tgtQty = Number(repackTargetQty);
-        
-        const totalSticksNeeded = tgtProd.size * tgtQty;
-        const srcPacksNeeded = Math.ceil(totalSticksNeeded / srcProd.size);
-        const leftoverSticks = (srcPacksNeeded * srcProd.size) - totalSticksNeeded;
+        const actualTargetPacks = Number(repackTargetQty);
+        if (actualTargetPacks <= 0) return;
+
+        const totalTargetSticks = actualTargetPacks * tgtProd.size;
+        // Calculate how many source packs we NEED to open to get these sticks
+        const srcQty = Math.ceil(totalTargetSticks / srcProd.size);
+        const totalSourceSticks = srcQty * srcProd.size;
+        const leftoverSticks = totalSourceSticks - totalTargetSticks;
 
         const sourceStock = stock.find(p => p.productName === srcProd.name)?.remaining || 0;
-        if (srcPacksNeeded > sourceStock) {
-            toast.error(`Not enough ${srcProd.name}! Need ${srcPacksNeeded}, but only ${sourceStock} available.`);
+        if (srcQty > sourceStock) {
+            toast.error(`Not enough ${srcProd.name} in stock! Need to open ${srcQty} packs, have ${sourceStock}.`);
             return;
         }
 
         setSaving(true);
         const txId = crypto.randomUUID().slice(0, 8);
 
-        // Entries:
-        // 1. Deduct source packs
-        const deductSource = {
-            date,
-            cook_name: "System/Packaging",
-            pack_size: srcProd.size,
-            packs_produced: -srcPacksNeeded,
-            production_type: "Packed",
-            notes: `Repacked into ${tgtQty}x ${tgtProd.name} [Prod:${srcProd.name}] [Style:${srcProd.stickSize}] [TX:${txId}]`
-        };
+        const entries: any[] = [
+            {
+                date,
+                cook_name: "System/Packaging",
+                pack_size: srcProd.size,
+                packs_produced: -srcQty,
+                production_type: "Packed",
+                notes: `Repacked into ${actualTargetPacks}x ${tgtProd.name} [Prod:${srcProd.name}] [TX:${txId}]`
+            },
+            {
+                date,
+                cook_name: "System/Packaging",
+                pack_size: tgtProd.size,
+                packs_produced: actualTargetPacks,
+                production_type: "Packed",
+                notes: `Repacked from ${srcQty}x ${srcProd.name} [Prod:${tgtProd.name}] [TX:${txId}]`,
+                leftover_sticks: leftoverSticks
+            }
+        ];
 
-        // 2. Add target packs
-        const addTarget = {
-            date,
-            cook_name: "System/Packaging",
-            pack_size: tgtProd.size,
-            packs_produced: tgtQty,
-            production_type: "Packed",
-            notes: `Repacked from ${srcPacksNeeded}x ${srcProd.name} [Prod:${tgtProd.name}] [Style:${tgtProd.stickSize}] [TX:${txId}]`
-        };
+        const { error } = await supabase.from('packing').insert(entries);
 
-        // 3. Add leftover sticks (if any)
-        const addLeftovers = {
-            date,
-            cook_name: "System/Packaging",
-            pack_size: 11,
-            packs_produced: Math.floor(leftoverSticks / 11),
-            leftover_sticks: leftoverSticks % 11,
-            production_type: "Unpacked",
-            notes: `Leftover from repacking ${srcProd.name} to ${tgtProd.name} [Style:${srcProd.stickSize}] [TX:${txId}]`
-        };
-
-        const { error: err1 } = await supabase.from('packing').insert(deductSource);
-        const { error: err2 } = await supabase.from('packing').insert(addTarget);
-        let err3 = null;
-        if (leftoverSticks > 0) {
-            const { error } = await supabase.from('packing').insert(addLeftovers);
-            err3 = error;
-        }
-
-        setSaving(false);
-
-        if (err1 || err2 || err3) {
-            toast.error("Error during repacking. Stock levels may be inaccurate.");
+        if (error) {
+            toast.error("Failed to repack. Try again.");
         } else {
-            toast.success(`Successfully repacked into ${tgtQty} units!`);
+            toast.success("Stock repacked successfully!");
             setRepackTargetQty("");
             fetchInventory();
         }
+        setSaving(false);
+    };
+
+    const handleProcessReturn = async (adj: any) => {
+        const product = PRODUCTS.find(p => p.name === adj.product_name);
+        if (!product) return;
+
+        const totalSticks = Number(adj.quantity) * product.size;
+        const waste = Number(crackedSticks || 0);
+        const goodSticks = totalSticks - waste;
+
+        if (goodSticks < 0) {
+            toast.error("Cracked sticks cannot exceed total sticks!");
+            return;
+        }
+
+        setSaving(true);
+        // Add salvaged sticks back to Unpacked
+        const { error: err1 } = await supabase.from('packing').insert({
+            date: new Date().toISOString().split('T')[0],
+            cook_name: "System/Returns",
+            pack_size: product.size,
+            packs_produced: 0,
+            leftover_sticks: goodSticks,
+            production_type: "Unpacked",
+            notes: `Salvaged from Order ${adj.order_id} (${adj.type}) [Waste: ${waste}pcs]`
+        });
+
+        // Add waste record for tracking
+        if (waste > 0) {
+            await supabase.from('packing').insert({
+                date: new Date().toISOString().split('T')[0],
+                cook_name: "System/Returns",
+                pack_size: product.size,
+                packs_produced: 0,
+                leftover_sticks: waste,
+                production_type: "Waste",
+                notes: `Damaged from Order ${adj.order_id} (${adj.type})`
+            });
+        }
+
+        // Mark as repacked
+        const { error: err2 } = await supabase.from('order_adjustments')
+            .update({ is_repacked: true })
+            .eq('id', adj.id);
+
+        if (err1 || err2) {
+            toast.error("Error processing return.");
+        } else {
+            toast.success("Return processed! Good sticks added to inventory.");
+            setProcessingReturn(null);
+            setCrackedSticks("");
+            fetchInventory();
+        }
+        setSaving(false);
     };
 
     const handleDelete = async (id: string) => {
@@ -602,93 +650,68 @@ export default function Inventory() {
                         </form>
                     ) : (
                         <form onSubmit={handleRepack} className="space-y-4">
-                             <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 relative z-10">
-                                <div className="col-span-1 lg:col-span-2">
+                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 relative z-10">
+                                <div className="col-span-1 lg:col-span-1">
                                     <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Source</label>
                                     <Select value={repackSourceSize} onValueChange={setRepackSourceSize} required>
                                         <SelectTrigger className="text-[11px] md:text-xs h-9 md:h-10"><SelectValue placeholder="From" /></SelectTrigger>
                                         <SelectContent>
                                             {PRODUCTS.filter(p => p.group !== "Barquillon Classic").map(p => (
-                                                <SelectItem key={p.name} value={p.name} triggerText={p.name} className="flex flex-col items-start py-2">
-                                                </SelectItem>
+                                                <SelectItem key={p.name} value={p.name} triggerText={p.name} />
                                             ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="col-span-1 lg:col-span-2">
+                                <div className="col-span-1 lg:col-span-1">
                                     <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Target</label>
                                     <Select value={repackTargetSize} onValueChange={setRepackTargetSize} required>
                                         <SelectTrigger className="text-[11px] md:text-xs h-9 md:h-10"><SelectValue placeholder="To" /></SelectTrigger>
                                         <SelectContent>
-                                            {(() => {
-                                                const sourceProduct = PRODUCTS.find(p => p.name === repackSourceSize);
-                                                return PRODUCTS.map(p => {
-                                                    const isCompatible = !sourceProduct || p.stickSize === sourceProduct.stickSize;
-                                                    const isSame = p.name === repackSourceSize;
-                                                    
-                                                    return (
-                                                        <SelectItem 
-                                                            key={p.name} 
-                                                            value={p.name} 
-                                                            triggerText={p.name} 
-                                                            disabled={!isCompatible || isSame}
-                                                            className="flex flex-col items-start py-2"
-                                                        >
-                                                            {!isCompatible && (
-                                                                <span className="text-[8px] text-destructive font-bold uppercase mb-0.5">Incompatible Stick Size</span>
-                                                            )}
-                                                            {isSame && (
-                                                                <span className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">Same as Source</span>
-                                                            )}
-                                                        </SelectItem>
-                                                    );
-                                                });
-                                            })()}
+                                            {PRODUCTS.filter(p => !repackSourceSize || PRODUCTS.find(s => s.name === repackSourceSize)?.stickSize === p.stickSize).map(p => (
+                                                <SelectItem key={p.name} value={p.name} triggerText={p.name} />
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Target Quantity</label>
-                                    <Input
-                                        type="number"
-                                        placeholder="0"
-                                        value={repackTargetQty}
-                                        onChange={(e) => setRepackTargetQty(e.target.value)}
-                                        min={1}
-                                        required
-                                        className="text-[11px] md:text-sm h-9 md:h-10"
-                                    />
+                                <div className="col-span-1">
+                                    <label className="text-[10px] md:text-xs font-semibold md:font-medium text-muted-foreground mb-1 block uppercase tracking-tight md:normal-case">Quantity</label>
+                                    <Input type="number" value={repackTargetQty} onChange={(e) => setRepackTargetQty(e.target.value)} placeholder="0" className="h-9 md:h-10 text-xs" required />
                                 </div>
-                                <div className="flex items-end">
-                                    <Button disabled={saving || !repackSourceSize || !repackTargetQty || !repackTargetSize} type="submit" className="w-full text-sm font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-md">
-                                        Repack Now
+                                <div className="flex items-end col-span-1 lg:col-span-1">
+                                    <Button disabled={saving || !repackSourceSize || !repackTargetSize || !repackTargetQty} type="submit" className="w-full h-9 md:h-10 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-md">
+                                        Repack
                                     </Button>
                                 </div>
-                            </div>
+                             </div>
 
-                            {repackSourceSize && repackTargetQty && repackTargetSize && (
-                                <div className="p-2 bg-purple-50/50 rounded border border-purple-100 relative z-10">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-[10px] text-purple-700 font-black uppercase">
-                                                Producing {Number(repackTargetQty)}x {repackTargetSize}
+                            {repackSourceSize && repackTargetSize && repackTargetQty && (
+                                <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 relative z-10 animate-in fade-in slide-in-from-left-2 duration-300">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                        <div className="space-y-0.5">
+                                            <p className="text-[9px] uppercase font-black text-purple-600/70">
+                                                Calculation Breakdown
                                             </p>
-                                            <p className="text-[9px] text-purple-600 font-medium">
-                                                Total sticks needed: {Number(repackTargetQty) * PRODUCTS.find(p => p.name === repackTargetSize)?.size!}
+                                            <p className="text-[11px] font-bold text-foreground">
+                                                {repackTargetQty} Packs of {repackTargetSize} Needs {Number(repackTargetQty) * (PRODUCTS.find(p => p.name === repackTargetSize)?.size || 0)} sticks
+                                            </p>
+                                            <p className="text-[9px] text-muted-foreground italic">
+                                                Requires opening **{Math.ceil((Number(repackTargetQty) * (PRODUCTS.find(p => p.name === repackTargetSize)?.size || 0)) / (PRODUCTS.find(p => p.name === repackSourceSize)?.size || 1))}** packs of {repackSourceSize}
                                             </p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-[10px] text-purple-700 font-black uppercase">
-                                                Consuming {Math.ceil((Number(repackTargetQty) * PRODUCTS.find(p => p.name === repackTargetSize)?.size!) / PRODUCTS.find(p => p.name === repackSourceSize)?.size!)}x {repackSourceSize}
+                                        <div className="text-right space-y-1">
+                                            <p className="text-[9px] uppercase font-black text-purple-700/60">
+                                                After Repack
                                             </p>
-                                            <p className="text-[9px] text-purple-600 font-medium italic">
-                                                + {(Math.ceil((Number(repackTargetQty) * PRODUCTS.find(p => p.name === repackTargetSize)?.size!) / PRODUCTS.find(p => p.name === repackSourceSize)?.size!) * PRODUCTS.find(p => p.name === repackSourceSize)?.size!) - (Number(repackTargetQty) * PRODUCTS.find(p => p.name === repackTargetSize)?.size!)} leftover sticks
+                                            <p className="text-[10px] font-bold text-success">
+                                                +{repackTargetQty} packs in stock
                                             </p>
+                                            {(Math.ceil((Number(repackTargetQty) * (PRODUCTS.find(p => p.name === repackTargetSize)?.size || 0)) / (PRODUCTS.find(p => p.name === repackSourceSize)?.size || 1)) * (PRODUCTS.find(p => p.name === repackSourceSize)?.size || 0)) % (PRODUCTS.find(p => p.name === repackTargetSize)?.size || 1) > 0 && (
+                                                <p className="text-[9px] text-orange-600 font-medium">
+                                                    + { (Math.ceil((Number(repackTargetQty) * (PRODUCTS.find(p => p.name === repackTargetSize)?.size || 0)) / (PRODUCTS.find(p => p.name === repackSourceSize)?.size || 1)) * (PRODUCTS.find(p => p.name === repackSourceSize)?.size || 0)) - (Number(repackTargetQty) * (PRODUCTS.find(p => p.name === repackTargetSize)?.size || 0)) } Extra Sticks
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
-                                    {Math.ceil((Number(repackTargetQty) * PRODUCTS.find(p => p.name === repackTargetSize)?.size!) / PRODUCTS.find(p => p.name === repackSourceSize)?.size!) > (stock.find(p => p.productName === repackSourceSize)?.remaining || 0) && (
-                                        <p className="text-[9px] text-red-600 font-black uppercase mt-1">⚠️ Error: Need {Math.ceil((Number(repackTargetQty) * PRODUCTS.find(p => p.name === repackTargetSize)?.size!) / PRODUCTS.find(p => p.name === repackSourceSize)?.size!)} source packs, but only {stock.find(p => p.productName === repackSourceSize)?.remaining || 0} available.</p>
-                                    )}
                                 </div>
                             )}
                         </form>
@@ -815,8 +838,13 @@ export default function Inventory() {
                                         </div>
                                         <div className="col-span-2">
                                             <div className="flex items-center gap-2">
-                                                <span className={`text-[8px] px-1 rounded uppercase font-bold border ${conv.production_type === 'Unpacked' ? 'text-orange-600 bg-orange-50 border-orange-100' : 'text-blue-600 bg-blue-50 border-blue-100'}`}>
-                                                    {conv.production_type === 'Unpacked' ? 'Deducted' : 'Added'}
+                                                <span className={`text-[8px] px-1 rounded uppercase font-bold border ${
+                                                    conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'text-success bg-success/5 border-success/20' :
+                                                    conv.production_type === 'Unpacked' ? 'text-orange-600 bg-orange-50 border-orange-100' : 
+                                                    'text-blue-600 bg-blue-50 border-blue-100'
+                                                }`}>
+                                                    {conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Recovered' : 
+                                                     conv.production_type === 'Unpacked' ? 'Deducted' : 'Added'}
                                                 </span>
                                                 <p className="text-[10px] text-muted-foreground truncate italic">
                                                     "{conv.notes?.split(' [TX:')[0]}"
@@ -824,14 +852,19 @@ export default function Inventory() {
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className={`text-xs ${conv.production_type === 'Unpacked' ? 'text-orange-600' : 'text-blue-600'}`}>
+                                            <p className={`text-xs ${
+                                                conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'text-success' :
+                                                conv.production_type === 'Unpacked' ? 'text-orange-600' : 
+                                                'text-blue-600'
+                                            }`}>
                                                 {conv.production_type === 'Unpacked' 
                                                     ? `${Math.abs((conv.packs_produced || 0) * 11 + (conv.leftover_sticks || 0))} sticks` 
                                                     : `${conv.packs_produced} packs`
                                                 }
                                             </p>
                                             <p className="text-[9px] text-muted-foreground uppercase">
-                                                {conv.production_type === 'Unpacked' ? 'Deducted' : (conv.notes?.match(/\[Prod:(.*?)\]/)?.[1] || `${conv.pack_size}rd`)}
+                                                {conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Salvaged Back' :
+                                                 conv.production_type === 'Unpacked' ? 'Deducted' : (conv.notes?.match(/\[Prod:(.*?)\]/)?.[1] || `${conv.pack_size}rd`)}
                                             </p>
                                         </div>
                                     </div>
@@ -986,6 +1019,115 @@ export default function Inventory() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Process Return Dialog */}
+            <Dialog open={!!processingReturn} onOpenChange={(open) => !open && setProcessingReturn(null)}>
+                <DialogContent className="sm:max-w-[400px] p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+                    <div className="bg-primary/10 p-6 flex flex-col items-center text-center space-y-2">
+                        <div className="bg-white p-3 rounded-full shadow-sm text-primary">
+                            <RefreshCw className="h-6 w-6" />
+                        </div>
+                        <h3 className="text-lg font-black text-primary uppercase tracking-tight">Process Damage / Return</h3>
+                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">
+                            Order #{processingReturn?.order_id} • {processingReturn?.product_name}
+                        </p>
+                    </div>
+                    <div className="p-6 space-y-6 bg-white">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="p-3 bg-muted/30 rounded-xl">
+                                <label className="text-[9px] uppercase font-black text-muted-foreground mb-1 block">Total Returned</label>
+                                <p className="text-sm font-bold text-foreground">{processingReturn?.quantity} Packs</p>
+                                <p className="text-[9px] text-muted-foreground italic">
+                                    ({Number(processingReturn?.quantity || 0) * (PRODUCTS.find(p => p.name === processingReturn?.product_name)?.size || 0)} Total Sticks)
+                                </p>
+                            </div>
+                            <div className="p-3 bg-destructive/5 rounded-xl border border-destructive/10">
+                                <label className="text-[9px] uppercase font-black text-destructive/70 mb-1 block">Cracked Sticks</label>
+                                <Input 
+                                    type="number" 
+                                    value={crackedSticks} 
+                                    onChange={(e) => setCrackedSticks(e.target.value)}
+                                    placeholder="0"
+                                    className="h-10 text-sm font-bold border-destructive/20"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="bg-success/5 p-4 rounded-xl border border-success/20 text-center">
+                            <label className="text-[10px] uppercase font-black text-success/70 mb-1 block">Salvaged Good Sticks</label>
+                            <p className="text-2xl font-black text-success">
+                                {Math.max(0, (Number(processingReturn?.quantity || 0) * (PRODUCTS.find(p => p.name === processingReturn?.product_name)?.size || 0)) - Number(crackedSticks || 0))} 
+                                <span className="text-xs font-bold text-success/60 ml-2 uppercase">to Unpacked</span>
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest" onClick={() => setProcessingReturn(null)}>
+                                Cancel
+                            </Button>
+                            <Button 
+                                className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20"
+                                onClick={() => handleProcessReturn(processingReturn)}
+                                disabled={saving}
+                            >
+                                {saving ? "SAVING..." : "Finish & Add to Stock"}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Floating Returns Button */}
+            {returnedAdjustments.length > 0 && (
+                <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-50 animate-in slide-in-from-bottom-10 fade-in duration-500">
+                    <Button 
+                        onClick={() => {
+                            const el = document.getElementById('returns-section');
+                            el?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="h-14 w-14 md:h-16 md:w-16 rounded-full shadow-2xl bg-destructive hover:bg-destructive/90 text-white relative group active:scale-95 transition-all"
+                    >
+                        <RefreshCw className="h-6 w-6 md:h-7 md:w-7 animate-spin-slow group-hover:rotate-180 transition-transform duration-500" />
+                        <span className="absolute -top-1 -right-1 bg-white text-destructive text-[10px] font-black h-6 w-6 rounded-full flex items-center justify-center border-2 border-destructive shadow-md ring-4 ring-destructive/10">
+                            {returnedAdjustments.length}
+                        </span>
+                    </Button>
+                </div>
+            )}
+
+            <div id="returns-section" />
+            {returnedAdjustments.length > 0 && (
+                <div className="mt-12 bg-destructive/5 rounded-2xl border-2 border-dashed border-destructive/20 p-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <h3 className="text-xs font-black text-destructive uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                        <History className="h-4 w-4" /> Returns Pending Process ({returnedAdjustments.length})
+                    </h3>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {returnedAdjustments.map((adj) => (
+                            <div key={adj.id} className="bg-white p-4 rounded-xl border border-destructive/20 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                                    <Package className="h-12 w-12 text-destructive" />
+                                </div>
+                                <div className="relative z-10">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div>
+                                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Order #{adj.order_id}</p>
+                                            <h4 className="text-sm font-bold text-foreground">{adj.product_name}</h4>
+                                        </div>
+                                        <span className="text-[9px] font-black px-2 py-0.5 rounded bg-destructive/10 text-destructive">{adj.type}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-4">
+                                        <p className="text-xs font-black text-destructive">{adj.quantity} Packs</p>
+                                        <Button size="sm" variant="outline" className="h-8 text-[9px] font-black uppercase text-destructive border-destructive/30 hover:bg-destructive hover:text-white transition-all rounded-lg" onClick={() => setProcessingReturn(adj)}>
+                                            Process & Repack
+                                        </Button>
+                                    </div>
+                                    <p className="text-[9px] text-muted-foreground mt-2 italic">Recorded on {adj.date}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

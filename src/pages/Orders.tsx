@@ -28,10 +28,18 @@ export default function Orders() {
   const [items, setItems] = useState<any[]>([{ productName: PRODUCTS[0].name, quantity: 1, pricePerPack: 0 }]);
   const [isLoading, setIsLoading] = useState(true);
   const [payments, setPayments] = useState<Record<string, any[]>>({});
+  const [adjustments, setAdjustments] = useState<Record<string, any[]>>({});
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [newPayAmount, setNewPayAmount] = useState("");
+  const [newAdjustAmount, setNewAdjustAmount] = useState("");
+  const [newAdjustType, setNewAdjustType] = useState<"B.O." | "Pull Out">("B.O.");
+  const [adjustItems, setAdjustItems] = useState<{ product: string, qty: string }[]>([{ product: "", qty: "" }]);
+  const [newAdjustNote, setNewAdjustNote] = useState("");
   const [newPayDate, setNewPayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newPayMethod, setNewPayMethod] = useState("");
   const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [expandedAdjusts, setExpandedAdjusts] = useState<Record<string, boolean>>({});
   const { isEditMode, role } = useAuth();
 
   // CRM & Pricing State
@@ -88,6 +96,11 @@ export default function Orders() {
       .select('*')
       .order('payment_date', { ascending: false });
 
+    const { data: fetchedAdjustments } = await supabase
+      .from('order_adjustments')
+      .select('*')
+      .order('created_at', { ascending: false });
+
     // CRM Fetch
     const { data: fetchedClients } = await supabase
       .from('clients')
@@ -99,12 +112,20 @@ export default function Orders() {
     } else {
       setOrders(fetchedOrders || []);
       setAllClients(fetchedClients || []);
+      
       const payMap: Record<string, any[]> = {};
       fetchedPayments?.forEach(p => {
         if (!payMap[p.order_id]) payMap[p.order_id] = [];
         payMap[p.order_id].push(p);
       });
       setPayments(payMap);
+
+      const adjMap: Record<string, any[]> = {};
+      fetchedAdjustments?.forEach(a => {
+        if (!adjMap[a.order_id]) adjMap[a.order_id] = [];
+        adjMap[a.order_id].push(a);
+      });
+      setAdjustments(adjMap);
     }
     setIsLoading(false);
   };
@@ -348,11 +369,17 @@ export default function Orders() {
       toast.error("Enter a valid amount");
       return;
     }
+    
+    if (!newPayMethod) {
+      toast.error("Please select a payment method (Cash, GCash, or Bank)");
+      return;
+    }
 
     const { error } = await supabase.from('order_payments').insert({
-      order_id: orderNo, // Link using order_no
+      order_id: orderNo, 
       amount: Number(newPayAmount),
-      payment_date: newPayDate
+      payment_date: newPayDate,
+      method: newPayMethod
     });
 
     if (error) {
@@ -370,12 +397,93 @@ export default function Orders() {
 
     await supabase.from('orders').update({ 
       payment_status: status,
-      amount_paid: totalPaid // Keep for legacy/compat
+      amount_paid: totalPaid 
     }).eq('order_no', orderNo);
 
     setNewPayAmount("");
+    setNewPayMethod("");
     toast.success("Payment recorded!");
     fetchOrders();
+  };
+
+  const handleAddAdjustment = async (orderNo: string, currentAdjustments: any[] = [], currentPayments: any[] = [], originalTotal: number, orderItems: any[]) => {
+    const validItems = adjustItems.filter(i => i.product && Number(i.qty) > 0);
+    
+    if (validItems.length === 0) {
+      toast.error("Add at least one item with a valid quantity");
+      return;
+    }
+
+    setSaving(true);
+    let totalDeduction = 0;
+    const recordsToInsert = validItems.map(i => {
+      const selectedItemObj = orderItems.find(oi => oi.product === i.product);
+      const amount = Number(selectedItemObj?.price || 0) * Number(i.qty);
+      totalDeduction += amount;
+      
+      return {
+        order_id: orderNo, 
+        type: newAdjustType,
+        amount: amount,
+        product_name: i.product,
+        quantity: Number(i.qty),
+        note: newAdjustNote,
+        date: new Date().toISOString().split('T')[0]
+      };
+    });
+
+    const { error } = await supabase.from('order_adjustments').insert(recordsToInsert);
+
+    if (error) {
+      toast.error(`Database Error: ${error.message}`);
+      console.error(error);
+      setSaving(false);
+      return;
+    }
+
+    // Recalculate status based on NEW effective total
+    const totalAdjustedBefore = (currentAdjustments || []).reduce((s, a) => s + Number(a.amount), 0);
+    const totalAdjustedAfter = totalAdjustedBefore + totalDeduction;
+    const totalPaid = (currentPayments || []).reduce((s, p) => s + Number(p.amount), 0);
+    const effectiveTotal = Math.max(0, originalTotal - totalAdjustedAfter);
+
+    let status = "Partial";
+    if (totalPaid >= effectiveTotal) status = "Paid";
+    else if (totalPaid === 0) status = "Unpaid";
+
+    await supabase.from('orders').update({ payment_status: status }).eq('order_no', orderNo);
+
+    setAdjustItems([{ product: "", qty: "" }]);
+    setNewAdjustNote("");
+    setSaving(false);
+    toast.success(`${newAdjustType} recorded!`);
+    fetchOrders();
+  };
+
+  const calculateAndSetStatus = async (orderNo: string, originalTotal: number, currentAdjustments: any[], currentPayments: any[]) => {
+    const totalAdjusted = (currentAdjustments || []).reduce((s, a) => s + Number(a.amount || 0), 0);
+    const totalPaid = (currentPayments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+    const effectiveTotal = Math.max(0, originalTotal - totalAdjusted);
+
+    let status = "Partial";
+    if (totalPaid >= effectiveTotal && effectiveTotal > 0) status = "Paid";
+    else if (totalPaid === 0) status = "Unpaid";
+    else if (totalPaid >= effectiveTotal && effectiveTotal === 0) status = "Paid";
+
+    await supabase.from('orders').update({ payment_status: status }).eq('order_no', orderNo);
+  };
+
+  const handleDeleteAdjustment = async (adjId: string, orderNo: string, originalTotal: number, currentAdjustments: any[], currentPayments: any[]) => {
+      const { error } = await supabase.from('order_adjustments').delete().eq('id', adjId);
+      if (error) {
+          toast.error("Failed to delete adjustment");
+      } else {
+          // Calculate status based on REMAINING adjustments
+          const remainingAdjusts = currentAdjustments.filter(a => a.id !== adjId);
+          await calculateAndSetStatus(orderNo, originalTotal, remainingAdjusts, currentPayments);
+          toast.success("Adjustment removed");
+          fetchOrders();
+      }
   };
 
   const toggleItemPacked = async (itemId: string, currentStatus: string, orderNo: string) => {
@@ -621,9 +729,23 @@ export default function Orders() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <p className="text-lg font-black text-foreground leading-tight">{formatCurrency(o.total_price)}</p>
-                    <p className="text-[10px] text-muted-foreground">Paid: {formatCurrency(totalPaid)}</p>
+                  <div className="flex items-center gap-4 text-right">
+                    <div className="flex flex-col items-end">
+                        {adjustments[o.order_no]?.length > 0 ? (
+                          <>
+                            <p className="text-lg font-black text-foreground leading-none">{formatCurrency(o.total_price - adjustments[o.order_no].reduce((s, a) => s + Number(a.amount), 0))}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                                <span className="text-[9px] text-muted-foreground line-through decoration-destructive/30">{formatCurrency(o.total_price)}</span>
+                                <span className="text-[9px] text-destructive font-bold flex items-center gap-0.5">
+                                    <Trash2 className="h-2 w-2" /> -{formatCurrency(adjustments[o.order_no].reduce((s, a) => s + Number(a.amount), 0))}
+                                </span>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-lg font-black text-foreground leading-none">{formatCurrency(o.total_price)}</p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Paid: {formatCurrency(totalPaid)}</p>
+                    </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase text-center ${
@@ -709,44 +831,181 @@ export default function Orders() {
                             )}
                          </div>
                       </div>
+
+                      {/* Adjustments (B.O. / Pull Outs) */}
+                      <div className="mt-6 pt-4 border-t-2 border-dashed">
+                         <div 
+                           className="flex items-center justify-between cursor-pointer hover:bg-muted/10 p-1 rounded transition-colors"
+                           onClick={() => setExpandedAdjusts(prev => ({ ...prev, [o.order_no]: !prev[o.order_no] }))}
+                         >
+                            <h4 className="text-[10px] uppercase font-black text-muted-foreground flex items-center gap-2">
+                                <ChevronsUpDown className={`h-3 w-3 transition-transform ${expandedAdjusts[o.order_no] ? 'rotate-180' : ''}`} />
+                                <span>Adjustments (B.O. / Pull Out)</span>
+                            </h4>
+                            <span className="text-destructive text-[10px] font-black">-{formatCurrency(adjustments[o.order_no]?.reduce((s, a) => s + Number(a.amount), 0) || 0)}</span>
+                         </div>
+                         
+                         {expandedAdjusts[o.order_no] && (
+                           <div className="mt-4 animate-in slide-in-from-top-2 duration-200">
+                            <div className="space-y-2 mb-4">
+                                {adjustments[o.order_no]?.length > 0 ? adjustments[o.order_no].map((adj, i) => (
+                                        <div key={i} className="flex items-center justify-between p-2 bg-destructive/5 rounded-lg border border-destructive/10 relative group/adj">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${adj.type === 'B.O.' ? 'bg-destructive/20 text-destructive' : 'bg-orange-500/20 text-orange-600'}`}>{adj.type}</span>
+                                                    <span className="text-xs font-bold">{adj.quantity}x {adj.product_name}</span>
+                                                    <span className="text-[10px] text-muted-foreground">{adj.date}</span>
+                                                </div>
+                                                {adj.note && <p className="text-[10px] text-muted-foreground italic mt-0.5">"{adj.note}"</p>}
+                                                <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-tight">Total Deduction: {formatCurrency(adj.amount)}</p>
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive opacity-0 group-hover/adj:opacity-100" onClick={() => handleDeleteAdjustment(adj.id, o.order_no, o.total_price, adjustments[o.order_no], orderPayHistory)}>
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                )) : (
+                                    <p className="text-[10px] text-muted-foreground py-2 italic text-center">No adjustments recorded.</p>
+                                )}
+                            </div>
+
+                            {role !== 'viewer' && (
+                                <div className="space-y-4 bg-muted/20 p-4 rounded-xl border">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div>
+                                            <label className="text-[9px] uppercase font-black text-muted-foreground mb-1 block">Adjustment Type</label>
+                                            <Select value={newAdjustType} onValueChange={(v: any) => setNewAdjustType(v)}>
+                                                <SelectTrigger className="h-8 w-32 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="B.O." className="text-xs">Bad Order (B.O.)</SelectItem>
+                                                    <SelectItem value="Pull Out" className="text-xs">Pull Out</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold text-primary gap-1" onClick={() => setAdjustItems([...adjustItems, { product: "", qty: "" }])}>
+                                            <Plus className="h-3 w-3" /> Add Item
+                                        </Button>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                        {adjustItems.map((item, idx) => (
+                                            <div key={idx} className="grid grid-cols-12 gap-2 items-end animate-in fade-in slide-in-from-right-2 duration-200">
+                                                <div className="col-span-7">
+                                                    <label className="text-[8px] uppercase font-bold text-muted-foreground mb-0.5 block">Product</label>
+                                                    <Select value={item.product} onValueChange={(v) => {
+                                                        const newArr = [...adjustItems];
+                                                        newArr[idx].product = v;
+                                                        setAdjustItems(newArr);
+                                                    }}>
+                                                        <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {o.order_items?.map((oi: any) => (
+                                                                <SelectItem key={oi.product} value={oi.product} className="text-xs">
+                                                                    {oi.product} ({formatCurrency(oi.price)})
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="col-span-3">
+                                                    <label className="text-[8px] uppercase font-bold text-muted-foreground mb-0.5 block">Qty</label>
+                                                    <Input type="number" value={item.qty} onChange={(e) => {
+                                                        const newArr = [...adjustItems];
+                                                        newArr[idx].qty = e.target.value;
+                                                        setAdjustItems(newArr);
+                                                    }} placeholder="0" className="h-9 text-xs" />
+                                                </div>
+                                                <div className="col-span-2 flex justify-center pb-1">
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setAdjustItems(adjustItems.filter((_, i) => i !== idx))}>
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                                        <div>
+                                            <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block tracking-widest">Note / Reason</label>
+                                            <Input value={newAdjustNote} onChange={(e) => setNewAdjustNote(e.target.value)} placeholder="e.g. Returned due to damage" className="h-9 text-xs" />
+                                        </div>
+                                        <div className="bg-destructive/5 p-2 rounded border border-destructive/20 flex flex-col justify-center text-center">
+                                            <label className="text-[8px] uppercase font-black text-destructive/60 mb-0.5 block">Total Adjustment</label>
+                                            <p className="text-sm font-black text-destructive">
+                                                -{formatCurrency(adjustItems.reduce((acc, item) => {
+                                                    const found = o.order_items?.find((oi: any) => oi.product === item.product);
+                                                    return acc + (Number(found?.price || 0) * Number(item.qty || 0));
+                                                }, 0))}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <Button disabled={saving} className="w-full h-11 font-black uppercase text-[11px] tracking-widest bg-destructive hover:bg-destructive/90 text-white shadow-lg shadow-destructive/20 active:scale-95 transition-all" onClick={() => handleAddAdjustment(o.order_no, adjustments[o.order_no], payments[o.order_no], o.total_price, o.order_items)}>
+                                        {saving ? "SAVING..." : `SUBMIT ALL ADJUSTMENTS`}
+                                    </Button>
+                                </div>
+                            )}
+                           </div>
+                         )}
+                      </div>
                     </div>
 
                     {/* Payment History */}
                     <div className="bg-muted/10 p-4 rounded-xl border border-dashed border-muted-foreground/20">
-                      <h4 className="text-[10px] uppercase font-black text-muted-foreground mb-3 leading-none">Payment History</h4>
-                      <div className="space-y-2 mb-4">
-                        {orderPayHistory.length > 0 ? orderPayHistory.map((p, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-border last:border-0">
-                            <span className="text-muted-foreground font-mono">{p.payment_date}</span>
-                            <span className="font-bold text-success">+{formatCurrency(Number(p.amount))}</span>
-                          </div>
-                        )) : (
-                          <p className="text-[10px] text-muted-foreground py-2 italic text-center">No payments recorded yet.</p>
-                        )}
-                      </div>
+                       <div className="flex items-center justify-between mb-3">
+                         <h4 className="text-[10px] uppercase font-black text-muted-foreground leading-none tracking-widest">Balance Tracking</h4>
+                         <div className="text-right">
+                            <p className="text-[10px] font-bold text-foreground">Due: {formatCurrency(o.total_price - (adjustments[o.order_no]?.reduce((s, a) => s + Number(a.amount), 0) || 0))}</p>
+                            <p className="text-[8px] text-muted-foreground uppercase font-black">Balance: {formatCurrency(Math.max(0, (o.total_price - (adjustments[o.order_no]?.reduce((s, a) => s + Number(a.amount), 0) || 0)) - totalPaid))}</p>
+                         </div>
+                       </div>
+                       
+                       <div className="space-y-2 mb-4">
+                         {orderPayHistory.length > 0 ? orderPayHistory.map((p, i) => (
+                           <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-border last:border-0 relative">
+                             <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground font-mono">{p.payment_date}</span>
+                                <span className="text-[8px] font-black uppercase text-muted-foreground bg-muted px-1 rounded">{p.method || 'Cash'}</span>
+                             </div>
+                             <span className="font-bold text-success">+{formatCurrency(Number(p.amount))}</span>
+                           </div>
+                         )) : (
+                           <p className="text-[10px] text-muted-foreground py-2 italic text-center">No payments recorded yet.</p>
+                         )}
+                       </div>
 
                         {role !== 'viewer' && (
                           <div className="space-y-3 pt-3 border-t">
-                            <div className="grid grid-cols-2 gap-2">
-                               <div className="col-span-1">
-                                <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Date</label>
-                                <DatePicker 
-                                   date={newPayDate} 
-                                   onStringChange={setNewPayDate} 
-                                   className="h-8 text-[10px] px-2" 
-                                />
-                               </div>
-                               <div className="col-span-1">
-                                <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Amount</label>
-                                <Input 
-                                   type="number" 
-                                   value={newPayAmount} 
-                                   onChange={(e) => setNewPayAmount(e.target.value)} 
-                                   placeholder="₱ 0.00" 
-                                   className="h-8 text-[10px] px-2" 
-                                />
-                               </div>
-                            </div>
+                             <div className="grid grid-cols-3 gap-2">
+                                <div className="col-span-1">
+                                 <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block">Date</label>
+                                 <DatePicker 
+                                    date={newPayDate} 
+                                    onStringChange={setNewPayDate} 
+                                    className="h-8 text-[10px] px-2" 
+                                 />
+                                </div>
+                                <div className="col-span-1">
+                                 <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block">Method</label>
+                                 <Select value={newPayMethod} onValueChange={setNewPayMethod}>
+                                    <SelectTrigger className="h-8 text-[10px] font-black uppercase"><SelectValue placeholder="Pick" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Cash" className="text-xs">CASH 💵</SelectItem>
+                                        <SelectItem value="GCash" className="text-xs">GCASH 📱</SelectItem>
+                                        <SelectItem value="Bank" className="text-xs">BANK 🏦</SelectItem>
+                                    </SelectContent>
+                                 </Select>
+                                </div>
+                                <div className="col-span-1">
+                                 <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block">Amount</label>
+                                 <Input 
+                                    type="number" 
+                                    value={newPayAmount} 
+                                    onChange={(e) => setNewPayAmount(e.target.value)} 
+                                    placeholder="₱ 0" 
+                                    className="h-8 text-[10px] px-2 font-black" 
+                                 />
+                                </div>
+                             </div>
                             <Button 
                               size="sm" 
                               variant="secondary" 

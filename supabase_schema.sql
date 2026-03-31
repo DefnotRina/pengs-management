@@ -68,5 +68,6 @@ CREATE TABLE IF NOT EXISTS expenses (
     category TEXT NOT NULL CHECK (category IN ('Raw Material', 'Operational')),
     item TEXT NOT NULL,
     amount NUMERIC NOT NULL,
+    batch_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
