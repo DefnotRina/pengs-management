@@ -119,7 +119,7 @@ export const mockOrders: Order[] = [
 
 export const mockExpenses: Expense[] = [
     { id: "1", date: "2026-03-19", category: "Raw Material", item: "Flour (25kg)", amount: 850 },
-    { id: "2", date: "2026-03-19", category: "Raw Material", item: "Sugar (10kg)", amount: 450 },
+    { id: "2", date: "2026-03-19", category: "Raw Material", item: "Brown Sugar (10kg)", amount: 450 },
     { id: "3", date: "2026-03-18", category: "Operational", item: "Gas Tank", amount: 1200 },
     { id: "4", date: "2026-03-17", category: "Raw Material", item: "Eggs (10 trays)", amount: 2000 },
     { id: "5", date: "2026-03-16", category: "Operational", item: "Packaging Materials", amount: 600 },

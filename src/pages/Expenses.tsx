@@ -13,7 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const RAW_INGREDIENTS = [
     { name: "Flour", unit: "Sack" },
-    { name: "Sugar", unit: "Sack" },
+    { name: "Brown Sugar", unit: "Sack" },
+    { name: "White Sugar", unit: "kg" },
     { name: "Skim Milk", unit: "kg" },
     { name: "Butter Milk", unit: "kg" },
     { name: "Eggs", unit: "Tray" },
