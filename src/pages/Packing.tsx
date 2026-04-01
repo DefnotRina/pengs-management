@@ -8,6 +8,7 @@ import { PACK_SIZES, PRODUCTS, STICK_SIZES } from "@/lib/mock-data";
 import { Plus, Trash2, Edit2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { offlineSafeSupabase } from "@/lib/offline-safe-supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -103,22 +104,23 @@ export default function Packing() {
     
     setSaving(true);
     
-    const { error } = await supabase
-        .from('packing')
-        .insert(newEntry)
-        .select()
-        .single();
+    const { data: inserted, error, queued } = await offlineSafeSupabase.insert('packing', newEntry);
         
     setSaving(false);
 
     if (error) {
-        toast.error(`Error: ${error.message} - Please run the SQL commands.`);
+        toast.error(`Error: ${error.message}`);
         console.error(error);
     } else {
-        toast.success("Production logged seamlessly!");
+        if (queued) {
+            // Optimistically add to list
+            setEntries(prev => [{ ...newEntry, id: 'temp-' + Math.random() }, ...prev]);
+        } else {
+            toast.success("Production logged seamlessly!");
+            fetchEntries();
+        }
         setPacks("");
         setLeftoverSticks("");
-        fetchEntries();
     }
   };
 
@@ -129,13 +131,18 @@ export default function Packing() {
       message: "This entry will be permanently removed from the daily logs and cook payroll. This action cannot be undone.",
       onConfirm: async () => {
         setConfirmConfig(prev => ({ ...prev, open: false }));
-        const { error } = await supabase.from('packing').delete().eq('id', id);
+        const { error, queued } = await offlineSafeSupabase.delete('packing', { column: 'id', value: id });
         if (error) {
           toast.error("Failed to delete record");
           console.error(error);
         } else {
-          toast.success("Record deleted");
-          fetchEntries();
+          if (queued) {
+            setEntries(prev => prev.filter(e => e.id !== id));
+            toast.info("Delete queued for sync");
+          } else {
+            toast.success("Record deleted");
+            fetchEntries();
+          }
         }
       }
     });
@@ -167,9 +174,7 @@ export default function Packing() {
         notes = `[Style:${editStickSize}]`;
     }
 
-    const { error } = await supabase
-        .from('packing')
-        .update({
+    const { error, queued } = await offlineSafeSupabase.update('packing', {
             date: editDate,
             cook_name: editCook,
             pack_size: editType === "Packed" ? (PRODUCTS.find(p => p.name === editSize)?.size || Number(editSize)) : Number(editSize),
@@ -177,16 +182,21 @@ export default function Packing() {
             production_type: editType,
             leftover_sticks: editType === "Unpacked" ? Number(editLeftover || 0) : 0,
             notes
-        })
-        .eq('id', editingEntry.id);
+        }, { column: 'id', value: editingEntry.id });
         
     if (error) {
-        toast.error(`Error: ${error.message} - Please run the SQL commands.`);
+        toast.error(`Error: ${error.message}`);
         console.error(error);
     } else {
-        toast.success("Record updated");
+        if (queued) {
+            toast.info("Update queued for sync");
+            // Optimistic update
+            setEntries(prev => prev.map(e => e.id === editingEntry.id ? { ...e, cook_name: editCook, date: editDate, packs_produced: Number(editPacks) } : e));
+        } else {
+            toast.success("Record updated");
+            fetchEntries();
+        }
         setEditModalOpen(false);
-        fetchEntries();
     }
   };
 

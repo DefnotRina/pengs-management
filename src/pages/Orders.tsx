@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
+import { offlineSafeSupabase } from "@/lib/offline-safe-supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -536,12 +537,13 @@ export default function Orders() {
     }));
 
     // 2. Background Sync with Supabase
-    const { error } = await supabase.from('order_items').update({ status: newStatus }).eq('id', itemId);
+    const { error, queued } = await offlineSafeSupabase.update('order_items', { status: newStatus }, { column: 'id', value: itemId });
 
     if (error) {
       toast.error("Failed to update item packing status");
       fetchOrders(true); // Re-sync on error
     } else {
+      if (queued) toast.info("Packing status update queued");
       // 3. Handle Parent Order Status Update
       const order = orders.find(o => o.order_no === orderNo);
       if (order) {
@@ -567,12 +569,13 @@ export default function Orders() {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updateData } : o));
 
     // 2. Background Sync
-    const { error } = await supabase.from('orders').update(updateData).eq('id', id);
+    const { error, queued } = await offlineSafeSupabase.update('orders', updateData, { column: 'id', value: id });
     if (error) {
       toast.error("Failed to update status");
       fetchOrders(true);
     } else {
-      if (field === 'order_status' && value === 'Packed') {
+      if (queued) toast.info("Order status update queued");
+      if (field === 'order_status' && value === 'Packed' && !queued) {
         await supabase.from('order_items').update({ status: 'Packed' }).eq('order_id', orderNo);
       }
       toast.success("Status updated");

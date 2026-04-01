@@ -1,7 +1,9 @@
 import { ReactNode } from "react";
-import { DesktopSidebar, MobileNav, MobileHeader } from "./AppNav";
+import { DesktopSidebar, MobileHeader, MobileNav } from "./AppNav";
 import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/pages/Login";
+import { Toaster } from "@/components/ui/sonner";
+import { OfflineStatus } from "./OfflineStatus";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -18,7 +20,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         {children}
       </main>
       <MobileNav />
+      <Toaster position="top-center" richColors closeButton />
+      <OfflineStatus />
     </div>
   );
 }
-
