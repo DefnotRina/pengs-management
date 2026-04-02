@@ -28,14 +28,14 @@ export default function Expenses() {
     const [isLoading, setIsLoading] = useState(true);
     const { isEditMode, role } = useAuth();
     const [open, setOpen] = useState(false);
-    const [entries, setEntries] = useState([{ 
-        date: new Date().toISOString().split("T")[0], 
-        category: "Operational", 
-        item: "", 
-        qty: "1", 
-        unit: "", 
+    const [entries, setEntries] = useState([{
+        date: new Date().toISOString().split("T")[0],
+        category: "Operational",
+        item: "",
+        qty: "1",
+        unit: "",
         price: "",
-        amount: "" 
+        amount: ""
     }]);
     const [editOpen, setEditOpen] = useState(false);
     const [editingExpense, setEditingExpense] = useState<any>(null);
@@ -47,7 +47,7 @@ export default function Expenses() {
         title: string;
         message: string;
         onConfirm: () => void;
-    }>({ open: false, title: "", message: "", onConfirm: () => {} });
+    }>({ open: false, title: "", message: "", onConfirm: () => { } });
 
     const fetchExpenses = async () => {
         setIsLoading(true);
@@ -55,7 +55,7 @@ export default function Expenses() {
             .from('expenses')
             .select('*')
             .order('date', { ascending: false });
-        
+
         if (error) {
             toast.error("Failed to load expenses");
             console.error(error);
@@ -71,7 +71,7 @@ export default function Expenses() {
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         const validEntries = entries.filter(e => e.category && e.item && e.amount);
         if (validEntries.length === 0) {
             toast.error("Please fill at least one item completely");
@@ -89,22 +89,22 @@ export default function Expenses() {
             unit: e.unit,
             batch_id: batchId
         }));
-        
+
         const { error } = await supabase.from('expenses').insert(toInsert);
-        
+
         if (error) {
             toast.error("Failed to record expenses");
             console.error(error);
         } else {
             toast.success("Expenses recorded!");
-            setEntries([{ 
-                date: new Date().toISOString().split("T")[0], 
-                category: "Operational", 
-                item: "", 
-                qty: "1", 
-                unit: "", 
+            setEntries([{
+                date: new Date().toISOString().split("T")[0],
+                category: "Operational",
+                item: "",
+                qty: "1",
+                unit: "",
                 price: "",
-                amount: "" 
+                amount: ""
             }]);
             setOpen(false);
             fetchExpenses();
@@ -125,7 +125,7 @@ export default function Expenses() {
     const updateEntry = (idx: number, field: string, value: string) => {
         const updated = [...entries];
         updated[idx] = { ...updated[idx], [field]: value };
-        
+
         // Auto-calculate Total (Amount) if Qty or Price changes
         if (field === "qty" || field === "price") {
             const q = Number(updated[idx].qty) || 0;
@@ -134,7 +134,7 @@ export default function Expenses() {
                 updated[idx].amount = (q * p).toString();
             }
         }
-        
+
         // Auto-calculate Price if Amount changes
         if (field === "amount") {
             const q = Number(updated[idx].qty) || 0;
@@ -153,16 +153,16 @@ export default function Expenses() {
                 updated[idx].unit = "Small Tub";
             }
         }
-        
+
         if (field === "category" && value !== "Raw Ingredients") {
             updated[idx].unit = "";
         }
-        
+
         setEntries(updated);
     };
 
     const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0);
-    
+
     const totalsByCategory = EXPENSE_CATEGORIES.reduce((acc, cat) => {
         acc[cat] = expenses
             .filter(e => e.category === cat)
@@ -198,7 +198,7 @@ export default function Expenses() {
             unit: editData.unit,
             amount: Number(editData.amount)
         }).eq('id', editingExpense.id);
-        
+
         setSaving(false);
         if (error) {
             toast.error("Failed to update expense");
@@ -273,11 +273,11 @@ export default function Expenses() {
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                             <div>
                                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Date</label>
-                                            <DatePicker 
-                                                date={entry.date} 
-                                                onStringChange={(val) => updateEntry(idx, "date", val)} 
-                                                className="h-8 text-xs" 
-                                            />
+                                                <DatePicker
+                                                    date={entry.date}
+                                                    onStringChange={(val) => updateEntry(idx, "date", val)}
+                                                    className="h-8 text-xs"
+                                                />
                                             </div>
                                             <div>
                                                 <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Category</label>
@@ -298,7 +298,7 @@ export default function Expenses() {
                                                         </SelectContent>
                                                     </Select>
                                                 ) : (
-                                                    <Input value={entry.item} onChange={(e) => updateEntry(idx, "item", e.target.value)} placeholder="e.g. Rent" className="h-8 text-xs" required />
+                                                    <Input value={entry.item} onChange={(e) => updateEntry(idx, "item", e.target.value)} placeholder="e.g. Gas" className="h-8 text-xs" required />
                                                 )}
                                             </div>
                                         </div>
@@ -333,8 +333,8 @@ export default function Expenses() {
                                         </div>
 
                                         {entries.length > 1 && (
-                                            <button 
-                                                type="button" 
+                                            <button
+                                                type="button"
                                                 onClick={() => removeEntryRow(idx)}
                                                 className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 shadow-sm hover:scale-110 transition-transform"
                                             >
@@ -372,11 +372,11 @@ export default function Expenses() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {EXPENSE_CATEGORIES.map(cat => (
-                    <StatCard 
+                    <StatCard
                         key={cat}
-                        label={cat} 
-                        value={formatCurrency(totalsByCategory[cat] || 0)} 
-                        icon={cat === "Operational" ? Settings : cat === "Raw Ingredients" ? ShoppingBag : Wallet} 
+                        label={cat}
+                        value={formatCurrency(totalsByCategory[cat] || 0)}
+                        icon={cat === "Operational" ? Settings : cat === "Raw Ingredients" ? ShoppingBag : Wallet}
                         variant={cat === "Operational" ? "warning" : cat === "Raw Ingredients" ? "success" : "default"}
                     />
                 ))}
@@ -390,9 +390,9 @@ export default function Expenses() {
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{expenses.length} Records</span>
                 </div>
                 {isLoading ? (
-                     <p className="text-center text-sm text-muted-foreground py-10">Loading expenses...</p>
+                    <p className="text-center text-sm text-muted-foreground py-10">Loading expenses...</p>
                 ) : expenses.length === 0 ? (
-                     <p className="text-center text-sm text-muted-foreground py-10">No expenses recorded.</p>
+                    <p className="text-center text-sm text-muted-foreground py-10">No expenses recorded.</p>
                 ) : (
                     <div className="divide-y divide-border">
                         {sortedKeys.map((key) => {
@@ -403,7 +403,7 @@ export default function Expenses() {
                                 <div key={key}>
                                     <div className="bg-muted/10 px-4 py-2 border-y border-border/50">
                                         <h3 className="text-[10px] uppercase font-black text-muted-foreground tracking-widest flex items-center">
-                                            <Calendar className="h-3 w-3 mr-1.5 opacity-50" /> 
+                                            <Calendar className="h-3 w-3 mr-1.5 opacity-50" />
                                             {new Date(firstItem.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                                             {firstItem.created_at && (
                                                 <span className="ml-2 text-[8px] opacity-40 font-mono lowercase tracking-normal">
@@ -414,84 +414,83 @@ export default function Expenses() {
                                         </h3>
                                     </div>
 
-                                {/* Mobile cards */}
-                                <div className="md:hidden divide-y divide-border/50">
-                                    {dateExpenses.map((e) => (
-                                        <div key={e.id} className="relative overflow-hidden group">
-                                            {/* Actions */}
-                                            {isEditMode && (
-                                                <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
-                                                    {role !== 'viewer' && (
-                                                        <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                    {role === 'admin' && (
-                                                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {/* Content */}
-                                            <div className={`p-4 flex items-center justify-between gap-3 bg-card transition-transform duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-28' : ''}`}>
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-bold text-foreground">{e.item}</p>
-                                                    <p className="text-[10px] text-muted-foreground uppercase font-medium">{e.category} · {e.qty} {e.unit}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-black text-destructive">{formatCurrency(Number(e.amount))}</p>
+                                    {/* Mobile cards */}
+                                    <div className="md:hidden divide-y divide-border/50">
+                                        {dateExpenses.map((e) => (
+                                            <div key={e.id} className="relative overflow-hidden group">
+                                                {/* Actions */}
+                                                {isEditMode && (
+                                                    <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
+                                                        {role !== 'viewer' && (
+                                                            <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                        {role === 'admin' && (
+                                                            <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {/* Content */}
+                                                <div className={`p-4 flex items-center justify-between gap-3 bg-card transition-transform duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-28' : ''}`}>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-bold text-foreground">{e.item}</p>
+                                                        <p className="text-[10px] text-muted-foreground uppercase font-medium">{e.category} · {e.qty} {e.unit}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-sm font-black text-destructive">{formatCurrency(Number(e.amount))}</p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
 
-                                {/* Desktop list */}
-                                <div className="hidden md:block">
-                                    {dateExpenses.map((e) => (
-                                        <div key={e.id} className="relative overflow-hidden group border-b border-border last:border-b-0">
-                                            {/* Actions */}
-                                            {isEditMode && (
-                                                <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
-                                                    {role !== 'viewer' && (
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                    {role === 'admin' && (
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {/* Row Content */}
-                                            <div className={`grid grid-cols-6 gap-4 px-4 py-3 items-center bg-card transition-all duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-24' : ''}`}>
-                                                <div className="text-[10px] text-foreground uppercase font-mono">{e.date}</div>
-                                                <div>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                                                        e.category === "Raw Ingredients" ? "bg-orange-100 text-orange-700" :
-                                                        e.category === "Operational" ? "bg-blue-100 text-blue-700" :
-                                                        "bg-green-100 text-green-700"
-                                                    }`}>
-                                                        {e.category}
-                                                    </span>
-                                                </div>
-                                                <div className="col-span-2 text-xs font-bold text-foreground">{e.item}</div>
-                                                <div className="text-center text-[10px] text-muted-foreground uppercase font-medium">
-                                                    {e.qty} {e.unit}
-                                                </div>
-                                                <div className="text-right text-sm font-black text-destructive">
-                                                    {formatCurrency(Number(e.amount))}
+                                    {/* Desktop list */}
+                                    <div className="hidden md:block">
+                                        {dateExpenses.map((e) => (
+                                            <div key={e.id} className="relative overflow-hidden group border-b border-border last:border-b-0">
+                                                {/* Actions */}
+                                                {isEditMode && (
+                                                    <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
+                                                        {role !== 'viewer' && (
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(e)}>
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                        {role === 'admin' && (
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-red-50" onClick={() => handleDeleteExpense(e.id)}>
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {/* Row Content */}
+                                                <div className={`grid grid-cols-6 gap-4 px-4 py-3 items-center bg-card transition-all duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-24' : ''}`}>
+                                                    <div className="text-[10px] text-foreground uppercase font-mono">{e.date}</div>
+                                                    <div>
+                                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${e.category === "Raw Ingredients" ? "bg-orange-100 text-orange-700" :
+                                                                e.category === "Operational" ? "bg-blue-100 text-blue-700" :
+                                                                    "bg-green-100 text-green-700"
+                                                            }`}>
+                                                            {e.category}
+                                                        </span>
+                                                    </div>
+                                                    <div className="col-span-2 text-xs font-bold text-foreground">{e.item}</div>
+                                                    <div className="text-center text-[10px] text-muted-foreground uppercase font-medium">
+                                                        {e.qty} {e.unit}
+                                                    </div>
+                                                    <div className="text-right text-sm font-black text-destructive">
+                                                        {formatCurrency(Number(e.amount))}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -507,9 +506,9 @@ export default function Expenses() {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Date</label>
-                                    <DatePicker 
-                                        date={editData.date} 
-                                        onStringChange={(val) => setEditData({...editData, date: val})} 
+                                    <DatePicker
+                                        date={editData.date}
+                                        onStringChange={(val) => setEditData({ ...editData, date: val })}
                                     />
                                 </div>
                                 <div>
@@ -566,15 +565,15 @@ export default function Expenses() {
                         </p>
                     </div>
                     <div className="p-4 bg-white flex gap-3">
-                        <Button 
-                            variant="outline" 
+                        <Button
+                            variant="outline"
                             className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-muted transition-colors border-muted-foreground/20"
                             onClick={() => setConfirmConfig(prev => ({ ...prev, open: false }))}
                         >
                             Cancel
                         </Button>
-                        <Button 
-                            variant="destructive" 
+                        <Button
+                            variant="destructive"
                             className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest bg-destructive hover:bg-destructive/90 shadow-lg shadow-destructive/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
                             onClick={confirmConfig.onConfirm}
                         >
