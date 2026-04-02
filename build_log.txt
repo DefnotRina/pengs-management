@@ -1,0 +1,39 @@
+
+> pengs-management-system@0.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 3413 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/registerSW.js                      0.13 kB
+dist/manifest.webmanifest               0.45 kB
+dist/index.html                         1.23 kB │ gzip:   0.52 kB
+dist/assets/logo-text-HJh3iDS_.png    296.59 kB
+dist/assets/logo-RwDORG8E.png         566.56 kB
+dist/assets/index-BcqcqlRu.css         87.35 kB │ gzip:  14.68 kB
+dist/assets/index-C1ubW6Rd.js       1,409.99 kB │ gzip: 385.55 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.41s
+error during build:
+Error: Unable to write the service worker file. '/private/var/folders/hz/5pfpfr6969n2bvvqr51g0sq00000gn/T/4c893dcb6aa6ec079340aa5ceeb81fd5/sw.js: Missing semicolon. (1:87)
+
+> 1 | import {clientsClaim as workbox_core_clientsClaim} from '/Users/carlita/Documents/Peng's/Management Systsme/node_modules/workbox-core/clientsClaim.mjs';
+    |                                                                                        ^
+  2 | import {precacheAndRoute as workbox_precaching_precacheAndRoute} from '/Users/carlita/Documents/Peng's/Management Systsme/node_modules/workbox-precaching/precacheAndRoute.mjs';
+  3 | import {cleanupOutdatedCaches as workbox_precaching_cleanupOutdatedCaches} from '/Users/carlita/Documents/Peng's/Management Systsme/node_modules/workbox-precaching/cleanupOutdatedCaches.mjs';
+  4 | import {registerRoute as workbox_routing_registerRoute} from '/Users/carlita/Documents/Peng's/Management Systsme/node_modules/workbox-routing/registerRoute.mjs';'
+    at writeSWUsingDefaultTemplate (/Users/carlita/Documents/Peng's/Management Systsme/node_modules/workbox-build/build/lib/write-sw-using-default-template.js:68:15)
+    at async generateSW (/Users/carlita/Documents/Peng's/Management Systsme/node_modules/workbox-build/build/generate-sw.js:95:23)
+    at async generateServiceWorker (file:///Users/carlita/Documents/Peng's/Management%20Systsme/node_modules/vite-plugin-pwa/dist/index.js:208:23)
+    at async _generateSW (file:///Users/carlita/Documents/Peng's/Management%20Systsme/node_modules/vite-plugin-pwa/dist/index.js:234:5)
+    at async Object.handler (file:///Users/carlita/Documents/Peng's/Management%20Systsme/node_modules/vite-plugin-pwa/dist/index.js:427:13)
+    at async PluginDriver.hookParallel (file:///Users/carlita/Documents/Peng's/Management%20Systsme/node_modules/rollup/dist/es/shared/node-entry.js:22475:17)
+    at async Object.close (file:///Users/carlita/Documents/Peng's/Management%20Systsme/node_modules/rollup/dist/es/shared/node-entry.js:23494:13)
+    at async build (file:///Users/carlita/Documents/Peng's/Management%20Systsme/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65732:17)
+    at async CAC.<anonymous> (file:///Users/carlita/Documents/Peng's/Management%20Systsme/node_modules/vite/dist/node/cli.js:829:5)
