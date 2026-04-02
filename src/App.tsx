@@ -21,7 +21,7 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
         <TooltipProvider>
             <AuthProvider>
-                <Sonner position="bottom-right" richColors closeButton />
+                <Sonner richColors closeButton position="bottom-right" />
                 <BrowserRouter>
                     <Routes>
                         {/* We'll handle the Login guard inside AppLayout or here */}
