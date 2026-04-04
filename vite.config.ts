@@ -21,8 +21,8 @@ export default defineConfig(({ mode }) => ({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
             manifest: {
-                name: "Peng's Management System",
-                short_name: "Peng's",
+                name: "Pengs Management System",
+                short_name: "Pengs",
                 description: "Bakery and Inventory Management System",
                 theme_color: "#ffffff",
                 icons: [

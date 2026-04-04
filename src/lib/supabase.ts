@@ -4,7 +4,10 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Missing Supabase environment variables! Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env.local file.');
+  console.error('❌ Missing Supabase environment variables!');
+  console.warn('Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in Vercel or your .env.local file.');
+} else {
+  console.log('✅ Supabase environment variables detected.');
 }
 
 export const supabase = createClient(
