@@ -24,9 +24,9 @@ export default function Login() {
   };
 
   const roles = [
-    { id: 'admin' as const, label: 'Admin', desc: 'Owner / QA Access', icon: ShieldCheck },
-    { id: 'packer' as const, label: 'Packer', desc: 'Production Lead', icon: Package },
-    { id: 'viewer' as const, label: 'Viewer', desc: 'Family / Auditor', icon: Eye },
+    { id: 'admin' as const, label: 'Admin', desc: 'Owner', icon: ShieldCheck },
+    { id: 'packer' as const, label: 'Packer', desc: 'Production', icon: Package },
+    { id: 'viewer' as const, label: 'Viewer', icon: Eye },
   ];
 
   return (

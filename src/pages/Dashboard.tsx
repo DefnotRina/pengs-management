@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Package, Puzzle, DollarSign, TrendingDown, TrendingUp, Clock } from "lucide-react";
+import { Package, Puzzle, DollarSign, TrendingDown, TrendingUp, Clock, AlertTriangle } from "lucide-react";
 import { StatCard, PageHeader } from "@/components/StatCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { supabase } from "@/lib/supabase";
+import { PRODUCTS } from "@/lib/mock-data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { 
@@ -22,8 +23,11 @@ const formatCurrency = (v: number) => `₱${Math.abs(v).toLocaleString()}`;
 export default function Dashboard() {
     const { role } = useAuth();
     const [summary, setSummary] = useState({
-        totalPacks: 0, totalPieces: 0, totalIncome: 0, totalExpenses: 0, profit: 0, pendingOrders: 0
+        totalPacks: 0, totalPieces: 0, totalIncome: 0, totalExpenses: 0, profit: 0, 
+        pendingOrders: 0, totalReceivables: 0
     });
+    const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+    const [overdueOrders, setOverdueOrders] = useState<any[]>([]);
     const [packsBySize, setPacksBySize] = useState<any[]>([]);
     const [productionByCook, setProductionByCook] = useState<any[]>([]);
     const [recentPacks, setRecentPacks] = useState<any[]>([]);
@@ -58,12 +62,16 @@ export default function Dashboard() {
                 { data: packingData },
                 { data: orders },
                 { data: expenses },
-                { data: payments }
+                { data: payments },
+                { data: orderItems },
+                { data: adjustments }
             ] = await Promise.all([
                 supabase.from('packing').select('*'), 
                 supabase.from('orders').select('*'),
                 supabase.from('expenses').select('*'),
-                supabase.from('order_payments').select('*')
+                supabase.from('order_payments').select('*'),
+                supabase.from('order_items').select('*'),
+                supabase.from('order_adjustments').select('*')
             ]);
             
             const interval = getInterval();
@@ -111,13 +119,57 @@ export default function Dashboard() {
                 cookMap[cookKey] += pieces;
             });
 
+            // --- Stock Calculation (Same logic as Inventory) ---
+            const inventoryMap = PRODUCTS.reduce((acc: any, p) => {
+                acc[p.name] = { productName: p.name, totalPacked: 0, totalSold: 0, remaining: 0 };
+                return acc;
+            }, {});
+
+            packingData?.forEach((entry: any) => {
+                if (entry.production_type === 'Unpacked' || entry.production_type === 'Waste') return;
+                const prodName = entry.notes?.match(/\[Prod:(.*?)\]/)?.[1];
+                if (prodName && inventoryMap[prodName]) {
+                    inventoryMap[prodName].totalPacked += (entry.packs_produced || 0);
+                } else {
+                    const match = PRODUCTS.find(p => p.size === entry.pack_size && !entry.notes?.includes('Barquillon'));
+                    if (match && inventoryMap[match.name]) inventoryMap[match.name].totalPacked += (entry.packs_produced || 0);
+                }
+            });
+
+            orderItems?.forEach((item: any) => {
+                const match = PRODUCTS.find(p => p.size === item.pack_size);
+                if (match && inventoryMap[match.name]) inventoryMap[match.name].totalSold += (item.qty || 0);
+            });
+
+            const lowStock = Object.values(inventoryMap)
+                .map((inv: any) => ({ ...inv, remaining: inv.totalPacked - inv.totalSold }))
+                .filter((p: any) => p.remaining < 200)
+                .sort((a,b) => a.remaining - b.remaining);
+
+            setLowStockProducts(lowStock);
+
+            // --- Overdue Orders ---
+            const today = format(new Date(), 'yyyy-MM-dd');
+            const overdue = filteredOrders.filter(o => 
+                o.order_status !== 'Delivered' && 
+                o.delivery_deadline && 
+                o.delivery_deadline < today
+            );
+            setOverdueOrders(overdue);
+
+            // --- Total Receivables ---
+            const totalReceivables = orders
+                ?.filter(o => o.payment_status !== 'Paid' && o.payment_status !== 'Gift')
+                .reduce((s, o) => s + (Number(o.total_price || 0) - Number(o.amount_paid || 0)), 0) || 0;
+
             setSummary({
                 totalPacks,
                 totalPieces,
                 totalIncome,
                 totalExpenses: totalExp,
                 profit: totalIncome - totalExp,
-                pendingOrders
+                pendingOrders,
+                totalReceivables
             });
 
             // Format chart data
@@ -229,8 +281,8 @@ export default function Dashboard() {
                 )}
             </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+            {/* Financial Summary Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                 <StatCard label="Total Income" value={formatCurrency(summary.totalIncome)} icon={TrendingUp} variant="success" />
                 <StatCard label="Total Expenses" value={formatCurrency(summary.totalExpenses)} icon={TrendingDown} variant="danger" />
                 <StatCard
@@ -239,9 +291,7 @@ export default function Dashboard() {
                     icon={DollarSign}
                     variant={summary.profit >= 0 ? "success" : "danger"}
                 />
-                <StatCard label="Total Packs" value={summary.totalPacks.toLocaleString()} icon={Package} />
-                <StatCard label="Total Pieces" value={summary.totalPieces.toLocaleString()} icon={Puzzle} />
-                <StatCard label="Pending Orders" value={summary.pendingOrders} icon={Clock} variant="warning" />
+                <StatCard label="Total Receivables" value={formatCurrency(summary.totalReceivables)} icon={Clock} variant="warning" />
             </div>
 
             {/* Charts */}

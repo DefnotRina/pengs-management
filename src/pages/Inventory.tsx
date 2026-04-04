@@ -795,10 +795,12 @@ export default function Inventory() {
                                             <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full font-medium">In Stock</span>
                                         )}
                                     </div>
-                                    <div className="flex gap-4 text-xs text-muted-foreground bg-muted/30 p-2 rounded">
-                                        <span>Packed: <strong className="text-foreground">{p.totalPacked}</strong></span>
-                                        <span>Sold: <strong className="text-foreground">{p.totalSold}</strong></span>
-                                        <span>Left: <strong className={p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}>{p.remaining}</strong></span>
+                                    <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
+                                        <span className="font-bold uppercase tracking-wider text-[10px]">Current Stock</span>
+                                        <strong className={`text-base font-black ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>
+                                            {p.remaining.toLocaleString()}
+                                            <span className="text-[9px] font-bold ml-1 uppercase opacity-60">packs</span>
+                                        </strong>
                                     </div>
                                 </div>
                             ))}
@@ -808,24 +810,23 @@ export default function Inventory() {
                         <div className="hidden md:block overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="border-b border-border text-muted-foreground bg-muted/10">
-                                        <th className="text-left px-4 py-3 font-medium">Product Name</th>
-                                        <th className="text-right px-4 py-3 font-medium">Total Packed</th>
-                                        <th className="text-right px-4 py-3 font-medium">Total Sold</th>
-                                        <th className="text-right px-4 py-3 font-medium">Remaining</th>
-                                        <th className="text-center px-4 py-3 font-medium">Status</th>
+                                    <tr className="border-b border-border text-muted-foreground bg-muted/5 uppercase tracking-[0.15em] text-[10px]">
+                                        <th className="text-left px-6 py-4 font-black">Product Name</th>
+                                        <th className="text-right px-6 py-4 font-black">Current Stock</th>
+                                        <th className="text-center px-6 py-4 font-black">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {stock.map((p) => (
                                         <tr key={p.productName} className="hover:bg-muted/5 transition-colors">
-                                            <td className="px-4 py-3 font-medium text-foreground">
-                                                <div className="text-xs">{p.productName}</div>
-                                                <div className="text-[9px] text-muted-foreground uppercase">{p.stickSize} Sticks</div>
+                                            <td className="px-6 py-4 font-medium text-foreground">
+                                                <div className="text-sm font-bold">{p.productName}</div>
+                                                <div className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">{p.stickSize} Sticks</div>
                                             </td>
-                                            <td className="px-4 py-3 text-right text-foreground">{p.totalPacked}</td>
-                                            <td className="px-4 py-3 text-right text-foreground">{p.totalSold}</td>
-                                            <td className={`px-4 py-3 text-right font-bold ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>{p.remaining}</td>
+                                            <td className={`px-6 py-4 text-right font-black text-lg ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>
+                                                {p.remaining.toLocaleString()}
+                                                <span className="text-[10px] font-bold ml-1.5 opacity-50 uppercase">packs</span>
+                                            </td>
                                             <td className="px-4 py-3 text-center">
                                                 {p.remaining === 0 ? (
                                                     <span className="inline-flex items-center gap-1 text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">

@@ -638,7 +638,7 @@ export default function Orders() {
               setOrderNumber(generateNextOrderNo());
             }
           }}>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
               <DialogTrigger asChild>
                 <Button variant="outline" className="touch-target border-primary text-primary hover:bg-primary/5" onClick={() => {
                   setIsGiveaway(true);
