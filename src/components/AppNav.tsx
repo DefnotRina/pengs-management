@@ -13,7 +13,7 @@ const navItems = [
     { to: "/packing", label: "Packing", icon: Package, roles: ["admin", "packer", "viewer"] },
     { to: "/expenses", label: "Expenses", icon: Receipt, roles: ["admin", "viewer"] },
     { to: "/payroll", label: "Payroll", icon: Banknote, roles: ["admin", "viewer"] },
-    { to: "/employees", label: "Employees", icon: Users, roles: ["admin", "viewer"] },
+    { to: "/employees", label: "Employees", icon: Users, roles: ["admin", "packer", "viewer"] },
     { to: "/clients", label: "Clients", icon: Contact, roles: ["admin", "viewer"] },
 ];
 

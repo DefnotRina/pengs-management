@@ -250,29 +250,30 @@ export default function Employees() {
         )}
       </div>
 
-      {/* Global Cook Piece Rate Card */}
-      <div className="bg-card rounded-lg border p-4 shadow-sm flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Cook Piece Rate</p>
-          <p className="text-[10px] md:text-xs text-muted-foreground leading-tight">Applied to all Pay-Per-Output cooks: (total pieces / 11) × rate</p>
+      {role === 'admin' && (
+        <div className="bg-card rounded-lg border p-4 shadow-sm flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Cook Piece Rate</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground leading-tight">Applied to all Pay-Per-Output cooks: (total pieces / 11) × rate</p>
+          </div>
+          {editingRate ? (
+            <div className="flex items-center gap-2">
+              <Input type="number" min="0.1" step="0.1" value={tempRate} onChange={e => setTempRate(e.target.value)} className="w-24 h-9 touch-target text-right font-bold" placeholder={String(pieceRate)} />
+              <Button size="icon" className="h-9 w-9" onClick={handleSavePieceRate}><Check className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setEditingRate(false)}><X className="h-4 w-4" /></Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-extrabold text-primary">₱{pieceRate}</span>
+              {isEditMode && (
+                <Button variant="outline" size="sm" className="h-8 touch-target font-bold" onClick={() => { setTempRate(String(pieceRate)); setEditingRate(true); }}>
+                  <Pencil className="h-3 w-3 mr-1" /> Edit
+                </Button>
+              )}
+            </div>
+          )}
         </div>
-        {editingRate ? (
-          <div className="flex items-center gap-2">
-            <Input type="number" min="0.1" step="0.1" value={tempRate} onChange={e => setTempRate(e.target.value)} className="w-24 h-9 touch-target text-right font-bold" placeholder={String(pieceRate)} />
-            <Button size="icon" className="h-9 w-9" onClick={handleSavePieceRate}><Check className="h-4 w-4" /></Button>
-            <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setEditingRate(false)}><X className="h-4 w-4" /></Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-extrabold text-primary">₱{pieceRate}</span>
-            {isEditMode && role === 'admin' && (
-              <Button variant="outline" size="sm" className="h-8 touch-target font-bold" onClick={() => { setTempRate(String(pieceRate)); setEditingRate(true); }}>
-                <Pencil className="h-3 w-3 mr-1" /> Edit
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Add Employee Modal */}
       <Dialog open={empModalOpen} onOpenChange={setEmpModalOpen}>
@@ -352,14 +353,24 @@ export default function Employees() {
         <div className="flex justify-between items-center bg-card rounded-lg border p-1 shadow-sm overflow-x-auto">
           <TabsList className="w-full justify-start bg-transparent h-9 md:h-11">
             <TabsTrigger value="Active" className="text-xs md:text-sm px-4 data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold transition-all">
-                Active Staff ({employees.filter(e => (e.status || 'Active') === 'Active').length})
+                Active Staff ({employees.filter(e => {
+                    const s = e.status || 'Active';
+                    const isPacker = role === 'packer';
+                    const isCook = e.role?.toLowerCase().includes('cook');
+                    if (isPacker && !isCook) return false;
+                    return s === 'Active';
+                }).length})
             </TabsTrigger>
-            <TabsTrigger value="On Leave" className="text-xs md:text-sm px-4 data-[state=active]:bg-warning/10 data-[state=active]:text-warning font-bold transition-all">
-                On Leave ({employees.filter(e => e.status === 'On Leave').length})
-            </TabsTrigger>
-            <TabsTrigger value="Inactive" className="text-xs md:text-sm px-4 data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive font-bold transition-all">
-                Archive ({employees.filter(e => e.status === 'Inactive' || e.status === 'Resigned').length})
-            </TabsTrigger>
+            {role === 'admin' && (
+                <>
+                    <TabsTrigger value="On Leave" className="text-xs md:text-sm px-4 data-[state=active]:bg-warning/10 data-[state=active]:text-warning font-bold transition-all">
+                        On Leave ({employees.filter(e => e.status === 'On Leave').length})
+                    </TabsTrigger>
+                    <TabsTrigger value="Inactive" className="text-xs md:text-sm px-4 data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive font-bold transition-all">
+                        Archive ({employees.filter(e => e.status === 'Inactive' || e.status === 'Resigned').length})
+                    </TabsTrigger>
+                </>
+            )}
           </TabsList>
         </div>
 
@@ -384,6 +395,12 @@ export default function Employees() {
               <div className="divide-y divide-border">
                 {employees.filter(e => {
                     const s = e.status || 'Active';
+                    const isPacker = role === 'packer';
+                    const isCook = e.role?.toLowerCase().includes('cook');
+                    
+                    // Filter: Packers only see Cooks
+                    if (isPacker && !isCook) return false;
+
                     if (statusTab === 'Active') return s === 'Active';
                     if (statusTab === 'On Leave') return s === 'On Leave';
                     return s === 'Inactive' || s === 'Resigned';
@@ -413,8 +430,8 @@ export default function Employees() {
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {emp.role}
-                          {isFixed && emp.base_salary ? ` · ₱${emp.base_salary.toLocaleString()}` : ""}
-                          {!isFixed ? ` · ₱${pieceRate}/unit` : ""}
+                          {isFixed && emp.base_salary && role === 'admin' ? ` · ₱${emp.base_salary.toLocaleString()}` : ""}
+                          {!isFixed && role === 'admin' ? ` · ₱${pieceRate}/unit` : ""}
                           {emp.status_date && emp.status !== 'Active' && (
                             <span className="text-primary font-medium">
                                 {` · ${emp.status === 'On Leave' ? 'Away' : 'Archived'} since ${new Date(emp.status_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
@@ -460,49 +477,51 @@ export default function Employees() {
                       </div>
                     </div>
 
-                    {role === 'admin' && (
+                    {(role === 'admin' || role === 'packer') && (
                       <div className="flex items-center gap-1.5">
                         <Button variant="outline" size="sm" className="touch-target h-8 px-3 text-xs font-medium border-primary/20 hover:bg-primary/5 shadow-sm ml-1"
                             onClick={() => { setSelectedEmp(emp.names); setCaAmount(""); setCaNote(""); setCaDate(new Date().toISOString().split("T")[0]); setEditingCaId(null); setCaModalOpen(true); }}>
                             <Banknote className="h-3.5 w-3.5 mr-1.5 text-primary" /> Advance
                         </Button>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                                    <MoreVertical className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuLabel>Staff Actions</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                
-                                {statusTab === 'Active' ? (
-                                    <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'On Leave')} className="text-warning focus:text-warning gap-2 cursor-pointer">
-                                        <Archive className="h-4 w-4" /> On leave
-                                    </DropdownMenuItem>
-                                ) : (
-                                    <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'Active')} className="text-success focus:text-success gap-2 cursor-pointer">
-                                        <Activity className="h-4 w-4" /> Reactivate Staff
-                                    </DropdownMenuItem>
-                                )}
+                        {role === 'admin' && (
+                          <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                                      <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuLabel>Staff Actions</DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  
+                                  {statusTab === 'Active' ? (
+                                      <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'On Leave')} className="text-warning focus:text-warning gap-2 cursor-pointer">
+                                          <Archive className="h-4 w-4" /> On leave
+                                      </DropdownMenuItem>
+                                  ) : (
+                                      <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'Active')} className="text-success focus:text-success gap-2 cursor-pointer">
+                                          <Activity className="h-4 w-4" /> Reactivate Staff
+                                      </DropdownMenuItem>
+                                  )}
 
-                                {statusTab !== 'Inactive' && (
-                                    <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'Inactive')} className="text-destructive focus:text-destructive gap-2 cursor-pointer">
-                                        <UserMinus className="h-4 w-4" /> Resign / Inactive
-                                    </DropdownMenuItem>
-                                )}
+                                  {statusTab !== 'Inactive' && (
+                                      <DropdownMenuItem onClick={() => handleUpdateStatus(emp, 'Inactive')} className="text-destructive focus:text-destructive gap-2 cursor-pointer">
+                                          <UserMinus className="h-4 w-4" /> Resign / Inactive
+                                      </DropdownMenuItem>
+                                  )}
 
-                                {statusTab === 'Inactive' && bal > 0 && (
-                                    <>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => handleWriteOff(emp.names)} className="text-destructive focus:bg-destructive/10 font-bold gap-2 cursor-pointer">
-                                            <Ban className="h-4 w-4" /> Write-off Debt
-                                        </DropdownMenuItem>
-                                    </>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                                  {statusTab === 'Inactive' && bal > 0 && (
+                                      <>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem onClick={() => handleWriteOff(emp.names)} className="text-destructive focus:bg-destructive/10 font-bold gap-2 cursor-pointer">
+                                              <Ban className="h-4 w-4" /> Write-off Debt
+                                          </DropdownMenuItem>
+                                      </>
+                                  )}
+                              </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     )}
                   </div>
