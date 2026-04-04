@@ -44,10 +44,13 @@ CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     "orderNumber" TEXT NOT NULL,
     client TEXT NOT NULL,
-    deadline DATE NOT NULL,
-    "paymentStatus" TEXT CHECK ("paymentStatus" IN ('Unpaid', 'Partial', 'Paid')),
-    "orderStatus" TEXT CHECK ("orderStatus" IN ('Pending', 'Delivered')),
+    name TEXT, 
+    notes TEXT,
+    deadline DATE,
+    "paymentStatus" TEXT CHECK ("paymentStatus" IN ('Unpaid', 'Partial', 'Paid', 'Gift')),
+    "orderStatus" TEXT CHECK ("orderStatus" IN ('Pending', 'Delivered', 'Packed')),
     total NUMERIC NOT NULL,
+    delivered_on DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -65,9 +68,11 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE TABLE IF NOT EXISTS expenses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     date DATE NOT NULL,
-    category TEXT NOT NULL CHECK (category IN ('Raw Material', 'Operational')),
+    category TEXT NOT NULL CHECK (category IN ('Raw Ingredients', 'Operational', 'Supplies', 'Giveaway')),
     item TEXT NOT NULL,
     amount NUMERIC NOT NULL,
+    qty INTEGER DEFAULT 1,
+    unit TEXT,
     batch_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

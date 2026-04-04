@@ -35,7 +35,7 @@ export type PackSize = typeof PACK_SIZES[number];
 
 export const COOKS = ["Maria", "Juan", "Rosa", "Pedro", "Ana"] as const;
 
-export const EXPENSE_CATEGORIES = ["Operational", "Raw Ingredients", "Supplies"] as const;
+export const EXPENSE_CATEGORIES = ["Operational", "Raw Ingredients", "Supplies", "Giveaway"] as const;
 
 export interface PackingEntry {
     id: string;
@@ -50,11 +50,14 @@ export interface Order {
     id: string;
     orderNumber: string;
     client: string;
-    deadline: string;
-    paymentStatus: "Unpaid" | "Partial" | "Paid";
-    orderStatus: "Pending" | "Delivered";
+    name?: string; // For giveaways
+    notes?: string;
+    deadline?: string;
+    paymentStatus: "Unpaid" | "Partial" | "Paid" | "Gift";
+    orderStatus: "Pending" | "Delivered" | "Packed";
     items: OrderItem[];
     total: number;
+    delivered_on?: string;
 }
 
 export interface OrderItem {

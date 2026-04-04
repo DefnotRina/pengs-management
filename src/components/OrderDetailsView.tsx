@@ -248,8 +248,17 @@ export const OrderDetailsView = memo(({
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-[10px] uppercase font-black text-muted-foreground leading-none tracking-widest">Balance Tracking</h4>
             <div className="text-right">
-              <p className="text-[10px] font-bold text-foreground">Due: {formatCurrency(o.total_price - (adjustments[o.order_no]?.reduce((s, a) => s + Number(a.amount), 0) || 0))}</p>
-              <p className="text-[8px] text-muted-foreground uppercase font-black">Balance: {formatCurrency(Math.max(0, (o.total_price - (adjustments[o.order_no]?.reduce((s, a) => s + Number(a.amount), 0) || 0)) - totalPaid))}</p>
+              {o.payment_status === 'Gift' ? (
+                <>
+                  <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-tighter italic">Giveaway entry</p>
+                  <p className="text-[8px] text-indigo-500/70 font-black uppercase">Balance: {formatCurrency(0)}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] font-bold text-foreground">Due: {formatCurrency(o.total_price - (adjustments[o.order_no]?.reduce((s, a) => s + Number(a.amount), 0) || 0))}</p>
+                  <p className="text-[8px] text-muted-foreground uppercase font-black">Balance: {formatCurrency(Math.max(0, (o.total_price - (adjustments[o.order_no]?.reduce((s, a) => s + Number(a.amount), 0) || 0)) - totalPaid))}</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -267,7 +276,7 @@ export const OrderDetailsView = memo(({
             )}
           </div>
 
-          {role !== 'viewer' && (
+          {role !== 'viewer' && o.payment_status !== 'Gift' && (
             <div className="space-y-3 pt-3 border-t">
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-1">
@@ -308,6 +317,11 @@ export const OrderDetailsView = memo(({
               >
                 Add Payment
               </Button>
+            </div>
+          )}
+          {o.payment_status === 'Gift' && (
+            <div className="pt-4 border-t text-center">
+              <p className="text-[10px] text-muted-foreground italic">No payments required for giveaways.</p>
             </div>
           )}
         </div>

@@ -57,7 +57,8 @@ export default function Inventory() {
     const [repackTargetQty, setRepackTargetQty] = useState("");
     const [returnedAdjustments, setReturnedAdjustments] = useState<any[]>([]);
     const [processingReturn, setProcessingReturn] = useState<any>(null);
-    const [crackedSticks, setCrackedSticks] = useState("");
+    const [repackQty, setRepackQty] = useState("");
+    const [repackProduct, setRepackProduct] = useState("");
 
     const fetchInventory = async () => {
         setIsLoading(true);
@@ -103,6 +104,8 @@ export default function Inventory() {
                     else totalUnpackedRegular += sticks;
                     return;
                 }
+
+                if (entry.production_type === 'Waste') return;
                 
                 // Match by product name in notes or legacy pack_size
                 const prodName = entry.notes?.match(/\[Prod:(.*?)\]/)?.[1];
@@ -267,73 +270,119 @@ export default function Inventory() {
 
     const handleProcessReturn = async (adj: any) => {
         const product = PRODUCTS.find(p => p.name === adj.product_name);
-        if (!product) return;
+        const targetProduct = PRODUCTS.find(p => p.name === repackProduct);
+        if (!product || !targetProduct) return;
 
-        const totalSticks = Number(adj.quantity) * product.size;
-        const waste = Number(crackedSticks || 0);
-        const goodSticks = totalSticks - waste;
+        const originalQty = Number(adj.quantity);
+        const safeQty = Number(repackQty || 0);
 
-        if (goodSticks < 0) {
-            toast.error("Cracked sticks cannot exceed total sticks!");
+        if (safeQty > originalQty) {
+            toast.error("Packs to save cannot exceed total returned!");
             return;
         }
 
         setSaving(true);
-        // Add salvaged sticks back to Unpacked
-        const { error: err1 } = await supabase.from('packing').insert({
-            date: new Date().toISOString().split('T')[0],
-            cook_name: "System/Returns",
-            pack_size: product.size,
-            packs_produced: 0,
-            leftover_sticks: goodSticks,
-            production_type: "Unpacked",
-            notes: `Salvaged from Order ${adj.order_id} (${adj.type}) [Waste: ${waste}pcs]`
-        });
+        const txId = `RET:${adj.id}:${crypto.randomUUID().slice(0, 4)}`;
+        
+        try {
+            // 1. Add salvaged packs back to Packed stock
+            if (safeQty > 0) {
+                await supabase.from('packing').insert({
+                    date: new Date().toISOString().split('T')[0],
+                    cook_name: "System/Returns",
+                    pack_size: targetProduct.size,
+                    packs_produced: safeQty,
+                    production_type: "Packed",
+                    notes: `Salvaged as ${targetProduct.name} from Order ${adj.order_id} (${adj.type}) [TX:${txId}]`
+                });
+            }
 
-        // Add waste record for tracking
-        if (waste > 0) {
-            await supabase.from('packing').insert({
-                date: new Date().toISOString().split('T')[0],
-                cook_name: "System/Returns",
-                pack_size: product.size,
-                packs_produced: 0,
-                leftover_sticks: waste,
-                production_type: "Waste",
-                notes: `Damaged from Order ${adj.order_id} (${adj.type})`
-            });
-        }
+            // Note: We no longer insert 'Waste' into packing history as per user request
+            // to keep the history clean and strictly for inventory additions.
 
-        // Mark as repacked
-        const { error: err2 } = await supabase.from('order_adjustments')
-            .update({ is_repacked: true })
-            .eq('id', adj.id);
+            // 2. Mark the adjustment as processed
+            await supabase.from('order_adjustments')
+                .update({ is_repacked: true })
+                .eq('id', adj.id);
 
-        if (err1 || err2) {
-            toast.error("Error processing return.");
-        } else {
-            toast.success("Return processed! Good sticks added to inventory.");
+            toast.success(safeQty > 0 ? "Return processed successfully!" : "Marked as waste.");
             setProcessingReturn(null);
-            setCrackedSticks("");
             fetchInventory();
+        } catch (error) {
+            console.error(error);
+            toast.error("Error processing return.");
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
+    };
+
+    const handleMarkAsWaste = async (adj: any) => {
+        setConfirmConfig({
+            open: true,
+            title: "Mark as Waste?",
+            message: `This will permanently remove Order #${adj.order_id}'s return (${adj.product_name}) from the list without adding it to stock or history.`,
+            onConfirm: async () => {
+                setConfirmConfig(prev => ({ ...prev, open: false }));
+                setSaving(true);
+                const { error } = await supabase.from('order_adjustments')
+                    .update({ is_repacked: true })
+                    .eq('id', adj.id);
+                
+                if (error) toast.error("Failed to mark as waste");
+                else {
+                    toast.success("Return completely removed");
+                    fetchInventory();
+                }
+                setSaving(false);
+            }
+        });
     };
 
     const handleDelete = async (id: string) => {
         const itemToDelete = conversions.find(c => c.id === id);
-        const txId = itemToDelete?.notes?.match(/\[TX:(\w+)\]/)?.[1];
+        const txId = itemToDelete?.notes?.match(/\[TX:(.*?)\]/)?.[1];
 
         if (txId) {
+            const isReturn = txId.startsWith('RET-') || txId.startsWith('RET:');
+            let adjId = null;
+            
+            if (isReturn) {
+                if (txId.includes(':')) {
+                    adjId = txId.split(':')[1];
+                } else {
+                    // Legacy hyphen format: RET-UUID-SUFFIX (UUID has 4 hyphens total)
+                    const parts = txId.split('-');
+                    adjId = parts.slice(1, 6).join('-');
+                }
+            }
+
             setConfirmConfig({
                 open: true,
-                title: "Reverse Transaction?",
-                message: `This record is part of a linked transaction (ID: ${txId}). Deleting it will also remove all partner movements to keep your inventory balanced.`,
+                title: isReturn ? "Revert Processing?" : "Reverse Transaction?",
+                message: isReturn 
+                    ? `This record was part of a return process. Deleting it will put the return back into "Pending" so you can re-process it.`
+                    : `This record is part of a linked transaction (ID: ${txId}). Deleting it will also remove all partner movements to keep your inventory balanced.`,
                 onConfirm: async () => {
                     setConfirmConfig(prev => ({ ...prev, open: false }));
+                    
+                    // 1. Revert adjustment if it's a return
+                    if (isReturn && adjId) {
+                        const { error: adjErr } = await supabase
+                            .from('order_adjustments')
+                            .update({ is_repacked: false })
+                            .eq('id', adjId);
+                        if (adjErr) {
+                            toast.error("Failed to revert pending status");
+                            return;
+                        }
+                    }
+
+                    // 2. Delete the packing records
                     const { error } = await supabase.from('packing').delete().ilike('notes', `%[TX:${txId}]%`);
+                    
                     if (error) toast.error("Group delete failed");
                     else {
-                        toast.success("Transaction reversed successfully");
+                        toast.success(isReturn ? "Return reverted to pending" : "Transaction reversed successfully");
                         fetchInventory();
                     }
                 }
@@ -839,11 +888,13 @@ export default function Inventory() {
                                         <div className="col-span-2">
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[8px] px-1 rounded uppercase font-bold border ${
+                                                    conv.production_type === 'Waste' ? 'text-destructive bg-destructive/5 border-destructive/20' :
                                                     conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'text-success bg-success/5 border-success/20' :
                                                     conv.production_type === 'Unpacked' ? 'text-orange-600 bg-orange-50 border-orange-100' : 
                                                     'text-blue-600 bg-blue-50 border-blue-100'
                                                 }`}>
-                                                    {conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Recovered' : 
+                                                    {conv.production_type === 'Waste' ? 'Waste' :
+                                                     conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Recovered' : 
                                                      conv.production_type === 'Unpacked' ? 'Deducted' : 'Added'}
                                                 </span>
                                                 <p className="text-[10px] text-muted-foreground truncate italic">
@@ -853,6 +904,7 @@ export default function Inventory() {
                                         </div>
                                         <div className="text-right">
                                             <p className={`text-xs ${
+                                                conv.production_type === 'Waste' ? 'text-destructive' :
                                                 conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'text-success' :
                                                 conv.production_type === 'Unpacked' ? 'text-orange-600' : 
                                                 'text-blue-600'
@@ -863,7 +915,8 @@ export default function Inventory() {
                                                 }
                                             </p>
                                             <p className="text-[9px] text-muted-foreground uppercase">
-                                                {conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Salvaged Back' :
+                                                {conv.production_type === 'Waste' ? 'Thrown Out' :
+                                                 conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Salvaged Back' :
                                                  conv.production_type === 'Unpacked' ? 'Deducted' : (conv.notes?.match(/\[Prod:(.*?)\]/)?.[1] || `${conv.pack_size}rd`)}
                                             </p>
                                         </div>
@@ -1033,44 +1086,57 @@ export default function Inventory() {
                         </p>
                     </div>
                     <div className="p-6 space-y-6 bg-white">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="p-3 bg-muted/30 rounded-xl">
+                        <div className="p-3 bg-muted/30 rounded-xl flex justify-between items-center text-center">
+                            <div className="flex-1">
                                 <label className="text-[9px] uppercase font-black text-muted-foreground mb-1 block">Total Returned</label>
                                 <p className="text-sm font-bold text-foreground">{processingReturn?.quantity} Packs</p>
-                                <p className="text-[9px] text-muted-foreground italic">
-                                    ({Number(processingReturn?.quantity || 0) * (PRODUCTS.find(p => p.name === processingReturn?.product_name)?.size || 0)} Total Sticks)
-                                </p>
-                            </div>
-                            <div className="p-3 bg-destructive/5 rounded-xl border border-destructive/10">
-                                <label className="text-[9px] uppercase font-black text-destructive/70 mb-1 block">Cracked Sticks</label>
-                                <Input 
-                                    type="number" 
-                                    value={crackedSticks} 
-                                    onChange={(e) => setCrackedSticks(e.target.value)}
-                                    placeholder="0"
-                                    className="h-10 text-sm font-bold border-destructive/20"
-                                />
                             </div>
                         </div>
 
-                        <div className="bg-success/5 p-4 rounded-xl border border-success/20 text-center">
-                            <label className="text-[10px] uppercase font-black text-success/70 mb-1 block">Salvaged Good Sticks</label>
-                            <p className="text-2xl font-black text-success">
-                                {Math.max(0, (Number(processingReturn?.quantity || 0) * (PRODUCTS.find(p => p.name === processingReturn?.product_name)?.size || 0)) - Number(crackedSticks || 0))} 
-                                <span className="text-xs font-bold text-success/60 ml-2 uppercase">to Unpacked</span>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[9px] uppercase font-black text-muted-foreground mb-1 block">Packs to Save</label>
+                                <Input 
+                                    type="number" 
+                                    value={repackQty} 
+                                    onChange={(e) => setRepackQty(e.target.value)}
+                                    placeholder="0"
+                                    className="h-10 text-sm font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] uppercase font-black text-muted-foreground mb-1 block">Target Product</label>
+                                <Select value={repackProduct} onValueChange={setRepackProduct}>
+                                    <SelectTrigger className="h-10 text-[11px] font-bold">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {PRODUCTS.map(p => (
+                                            <SelectItem key={p.name} value={p.name} className="text-xs">{p.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="bg-destructive/5 p-4 rounded-xl border border-destructive/10 text-center">
+                            <label className="text-[10px] uppercase font-black text-destructive/70 mb-1 block">Remaining Waste</label>
+                            <p className="text-2xl font-black text-destructive">
+                                {Math.max(0, Number(processingReturn?.quantity || 0) - Number(repackQty || 0))} 
+                                <span className="text-xs font-bold text-destructive/60 ml-2 uppercase">Packs</span>
                             </p>
                         </div>
 
-                        <div className="flex gap-3">
-                            <Button variant="outline" className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest" onClick={() => setProcessingReturn(null)}>
-                                Cancel
-                            </Button>
+                        <div className="space-y-3">
                             <Button 
-                                className="flex-1 h-11 rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20"
+                                className="w-full h-12 rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
                                 onClick={() => handleProcessReturn(processingReturn)}
                                 disabled={saving}
                             >
-                                {saving ? "SAVING..." : "Finish & Add to Stock"}
+                                {saving ? "SAVING..." : "Confirm & Repack"}
+                            </Button>
+                            <Button variant="ghost" className="w-full h-9 rounded-xl font-bold uppercase text-[9px] text-muted-foreground tracking-widest" onClick={() => setProcessingReturn(null)}>
+                                Cancel
                             </Button>
                         </div>
                     </div>
@@ -1117,9 +1183,24 @@ export default function Inventory() {
                                     </div>
                                     <div className="flex items-center justify-between mt-4">
                                         <p className="text-xs font-black text-destructive">{adj.quantity} Packs</p>
-                                        <Button size="sm" variant="outline" className="h-8 text-[9px] font-black uppercase text-destructive border-destructive/30 hover:bg-destructive hover:text-white transition-all rounded-lg" onClick={() => setProcessingReturn(adj)}>
-                                            Process & Repack
-                                        </Button>
+                                        <div className="flex gap-2">
+                                            <Button 
+                                                size="sm" 
+                                                variant="outline" 
+                                                className="h-8 w-8 p-0 text-destructive border-destructive/30 hover:bg-destructive hover:text-white transition-all rounded-lg" 
+                                                onClick={() => handleMarkAsWaste(adj)}
+                                                title="Mark as Waste"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                            <Button size="sm" variant="outline" className="h-8 text-[9px] font-black uppercase text-destructive border-destructive/30 hover:bg-destructive hover:text-white transition-all rounded-lg" onClick={() => {
+                                                setProcessingReturn(adj);
+                                                setRepackQty(adj.quantity.toString());
+                                                setRepackProduct(adj.product_name);
+                                            }}>
+                                                Process & Repack
+                                            </Button>
+                                        </div>
                                     </div>
                                     <p className="text-[9px] text-muted-foreground mt-2 italic">Recorded on {adj.date}</p>
                                 </div>

@@ -51,17 +51,31 @@ export default function Expenses() {
 
     const fetchExpenses = async () => {
         setIsLoading(true);
-        const { data, error } = await supabase
-            .from('expenses')
-            .select('*')
-            .order('date', { ascending: false });
+        // Fetch regular expenses and giveaway orders (Gift status)
+        const [expRes, ordRes] = await Promise.all([
+            supabase.from('expenses').select('*').order('date', { ascending: false }),
+            supabase.from('orders').select('*').eq('payment_status', 'Gift')
+        ]);
 
-        if (error) {
+        if (expRes.error) {
             toast.error("Failed to load expenses");
-            console.error(error);
-        } else {
-            setExpenses(data || []);
+            console.error(expRes.error);
         }
+
+        const giveawayExpenses = (ordRes.data || []).map(o => ({
+            id: o.id,
+            date: o.delivered_on || (o.created_at ? o.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+            category: "Giveaway",
+            item: `Giveaway: ${o.name || o.client}`,
+            amount: Number(o.total_price),
+            isGiveaway: true,
+            order_no: o.order_no
+        }));
+
+        const allExpenses = [...(expRes.data || []), ...giveawayExpenses]
+            .sort((a, b) => b.date.localeCompare(a.date));
+
+        setExpenses(allExpenses);
         setIsLoading(false);
     };
 
@@ -284,7 +298,7 @@ export default function Expenses() {
                                                 <Select value={entry.category} onValueChange={(v) => updateEntry(idx, "category", v)} required>
                                                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
-                                                        {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs pl-3">{c}</SelectItem>)}
+                                                        {EXPENSE_CATEGORIES.filter(c => c !== "Giveaway").map((c) => <SelectItem key={c} value={c} className="text-xs pl-3">{c}</SelectItem>)}
                                                     </SelectContent>
                                                 </Select>
                                             </div>
@@ -472,7 +486,8 @@ export default function Expenses() {
                                                     <div>
                                                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${e.category === "Raw Ingredients" ? "bg-orange-100 text-orange-700" :
                                                                 e.category === "Operational" ? "bg-blue-100 text-blue-700" :
-                                                                    "bg-green-100 text-green-700"
+                                                                    e.category === "Giveaway" ? "bg-indigo-100 text-indigo-700" :
+                                                                        "bg-green-100 text-green-700"
                                                             }`}>
                                                             {e.category}
                                                         </span>
@@ -516,7 +531,7 @@ export default function Expenses() {
                                     <Select value={editData.category} onValueChange={(v) => updateEditData("category", v)}>
                                         <SelectTrigger className="h-10 text-xs shadow-sm font-medium"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c} className="text-xs pl-3">{c}</SelectItem>)}
+                                            {EXPENSE_CATEGORIES.filter(c => c !== "Giveaway").map(c => <SelectItem key={c} value={c} className="text-xs pl-3">{c}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>

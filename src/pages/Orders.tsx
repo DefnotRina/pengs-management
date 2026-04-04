@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PACK_SIZES, PRODUCTS } from "@/lib/mock-data";
-import { Plus, Search, Pencil, Trash2, Calendar as CalendarIcon, MoreVertical, Check, ChevronsUpDown, LayoutGrid, List } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Calendar as CalendarIcon, MoreVertical, Check, ChevronsUpDown, LayoutGrid, List, ShoppingBag, User, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -41,6 +41,10 @@ export default function Orders() {
   const [editingOrder, setEditingOrder] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [expandedAdjusts, setExpandedAdjusts] = useState<Record<string, boolean>>({});
+  const [name, setName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [giveawayDate, setGiveawayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isGiveaway, setIsGiveaway] = useState(false);
   const { isEditMode, role } = useAuth();
 
   // View state & Filters
@@ -65,8 +69,8 @@ export default function Orders() {
     onConfirm: () => void;
   }>({ open: false, title: "", message: "", onConfirm: () => { } });
 
-  const generateNextOrderNo = (baseDate: Date = new Date()) => {
-    const prefix = `ORD-${format(baseDate, "yyMM")}-`;
+  const generateNextOrderNo = (baseDate: Date = new Date(), isGift: boolean = false) => {
+    const prefix = isGift ? `GIV-${format(baseDate, "yyMM")}-` : `ORD-${format(baseDate, "yyMM")}-`;
 
     const currentMonthOrders = orders
       .filter(o => o.order_no && typeof o.order_no === 'string' && o.order_no.startsWith(prefix))
@@ -86,7 +90,7 @@ export default function Orders() {
     if (open && !editingOrder && newPayDate) {
       const selectedDate = new Date(newPayDate);
       if (!isNaN(selectedDate.getTime())) {
-        setOrderNumber(generateNextOrderNo(selectedDate));
+        setOrderNumber(generateNextOrderNo(selectedDate, isGiveaway));
       }
     }
   }, [newPayDate, open, editingOrder, orders]);
@@ -267,8 +271,13 @@ export default function Orders() {
   };
 
   const handleCreate = async () => {
-    if (!orderNumber || !client || !deadline) {
-      toast.error("Please fill all required fields");
+
+    const isFormValid = isGiveaway 
+      ? (orderNumber && name) 
+      : (orderNumber && client && deadline);
+
+    if (!isFormValid) {
+      toast.error(isGiveaway ? "Please fill in the Name and Date" : "Please fill all required fields");
       return;
     }
 
@@ -281,13 +290,16 @@ export default function Orders() {
       .from('orders')
       .insert({
         order_no: orderNumber,
-        client: client,
-        client_id: selectedClientId,
-        delivery_deadline: deadline,
-        payment_status: paymentStatus,
-        order_status: "Pending",
+        client: isGiveaway ? "Giveaway" : client,
+        client_id: isGiveaway ? null : selectedClientId,
+        name: isGiveaway ? name : null,
+        notes: notes,
+        delivery_deadline: isGiveaway ? null : deadline,
+        delivered_on: isGiveaway ? newPayDate : null,
+        payment_status: isGiveaway ? "Gift" : paymentStatus,
+        order_status: isGiveaway ? "Delivered" : "Pending",
         total_price: total,
-        amount_paid: paymentStatus === "Paid" ? total : Number(amountPaid || 0)
+        amount_paid: isGiveaway ? 0 : (paymentStatus === "Paid" ? total : Number(amountPaid || 0))
       })
       .select()
       .single();
@@ -327,8 +339,13 @@ export default function Orders() {
   };
 
   const handleUpdate = async () => {
-    if (!orderNumber || !client || !deadline) {
-      toast.error("Please fill all required fields");
+
+    const isFormValid = isGiveaway 
+      ? (orderNumber && name) 
+      : (orderNumber && client && deadline);
+
+    if (!isFormValid) {
+      toast.error(isGiveaway ? "Please fill in the Name and Date" : "Please fill all required fields");
       return;
     }
 
@@ -336,9 +353,15 @@ export default function Orders() {
     const { error: orderError } = await supabase
       .from('orders')
       .update({
-        client: client,
-        client_id: selectedClientId,
-        delivery_deadline: deadline,
+        order_no: orderNumber,
+        client: isGiveaway ? "Giveaway" : client,
+        client_id: isGiveaway ? null : selectedClientId,
+        name: isGiveaway ? name : null,
+        notes: notes,
+        delivery_deadline: isGiveaway ? null : deadline,
+        delivered_on: isGiveaway ? (editingOrder.delivered_on || newPayDate) : editingOrder.delivered_on,
+        payment_status: isGiveaway ? "Gift" : paymentStatus,
+        order_status: isGiveaway ? "Delivered" : "Pending",
         total_price: total,
       })
       .eq('order_no', editingOrder.order_no);
@@ -354,7 +377,7 @@ export default function Orders() {
     const itemsToInsert = items.map(i => {
       const prod = PRODUCTS.find(p => p.name === i.productName);
       return {
-        order_id: editingOrder.order_no,
+        order_id: orderNumber, // Use the potentially new orderNumber
         product: prod?.name || "Unknown",
         pack_size: prod?.size || 11,
         qty: i.quantity,
@@ -391,6 +414,10 @@ export default function Orders() {
     } else {
       setClientSpecificPrices({});
     }
+
+    setNotes(order.notes || "");
+    setName(order.name || "");
+    setIsGiveaway(order.payment_status === "Gift");
 
     // Set the items from the order data
     setItems(order.order_items.map((i: any) => ({
@@ -611,76 +638,155 @@ export default function Orders() {
               setOrderNumber(generateNextOrderNo());
             }
           }}>
-            <DialogTrigger asChild>
-              <Button className="touch-target" onClick={() => {
-                setEditingOrder(null);
-                setOrderNumber(generateNextOrderNo());
-                setClient("");
-                setSelectedClientId(null);
-                setDeadline("");
-                setAmountPaid("");
-                setPaymentStatus("Unpaid");
-                setItems([{ productName: PRODUCTS[0].name, quantity: 1, pricePerPack: 0 }]);
-              }}>
-                <Plus className="h-4 w-4 mr-2" />New Order
-              </Button>
-            </DialogTrigger>
+            <div className="flex gap-2">
+              <DialogTrigger asChild>
+                <Button variant="outline" className="touch-target border-primary text-primary hover:bg-primary/5" onClick={() => {
+                  setIsGiveaway(true);
+                  setEditingOrder(null);
+                  setOrderNumber(generateNextOrderNo(new Date(), true));
+                  setClient("Giveaway");
+                  setName("");
+                  setNotes("");
+                  setDeadline("");
+                  setGiveawayDate(new Date().toISOString().split('T')[0]);
+                  setPaymentStatus("Gift");
+                  setItems([{ productName: PRODUCTS[0].name, quantity: 1, pricePerPack: PRODUCTS[0].basePrice }]);
+                }}>
+                  <ShoppingBag className="h-4 w-4 mr-2" />Log Giveaway
+                </Button>
+              </DialogTrigger>
+              <DialogTrigger asChild>
+                <Button className="touch-target" onClick={() => {
+                  setIsGiveaway(false);
+                  setEditingOrder(null);
+                  setOrderNumber(generateNextOrderNo());
+                  setClient("");
+                  setName("");
+                  setNotes("");
+                  setSelectedClientId(null);
+                  setDeadline("");
+                  setAmountPaid("");
+                  setPaymentStatus("Unpaid");
+                  setItems([{ productName: PRODUCTS[0].name, quantity: 1, pricePerPack: 0 }]);
+                }}>
+                  <Plus className="h-4 w-4 mr-2" />New Order
+                </Button>
+              </DialogTrigger>
+            </div>
             <DialogContent className="max-w-lg w-[95vw] md:w-full max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>{editingOrder ? `Edit Order ${editingOrder.order_no}` : "Create Order"}</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>
+                  {editingOrder 
+                    ? (isGiveaway ? "Edit Giveaway" : `Edit Order ${editingOrder.order_no}`) 
+                    : (isGiveaway ? "Log Giveaway" : "Create Order")
+                  }
+                </DialogTitle>
+              </DialogHeader>
               <div className="space-y-4 pt-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Order Number</label>
-                    <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="ORD-001" className="h-9 text-xs" disabled={!!editingOrder} />
-                  </div>
-                  <div className="relative">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Client</label>
-                    <Input
-                      value={client}
-                      onChange={(e) => handleManualClientChange(e.target.value)}
-                      onFocus={() => setShowSuggestions(true)}
-                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Start typing name..."
-                      className="h-9 text-xs"
-                    />
+                {!isGiveaway && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Order Number</label>
+                      <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="ORD-001" className="h-9 text-xs" disabled={!!editingOrder} />
+                    </div>
+                    <div className="relative">
+                      <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Client</label>
+                      <Input
+                        value={client}
+                        onChange={(e) => handleManualClientChange(e.target.value)}
+                        onFocus={() => setShowSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Start typing name..."
+                        className="h-9 text-xs"
+                      />
 
-                    {showSuggestions && filteredClients.length > 0 && (
-                      <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-card border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                        {filteredClients.map((c, idx) => (
-                          <button
-                            key={c.id}
-                            onClick={() => handleClientSelect(c)}
-                            className={cn(
-                              "w-full text-left px-3 py-2 text-xs border-b last:border-0 flex justify-between items-center transition-colors",
-                              idx === suggestionIndex ? "bg-accent text-accent-foreground" : "hover:bg-muted"
-                            )}
-                          >
-                            <span className="font-medium">{c.name}</span>
-                            <span className="text-[9px] text-primary uppercase font-bold">CRM Client</span>
-                          </button>
-                        ))}
+                      {showSuggestions && filteredClients.length > 0 && (
+                        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-card border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {filteredClients.map((c, idx) => (
+                            <button
+                              key={c.id}
+                              onClick={() => handleClientSelect(c)}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-xs border-b last:border-0 flex justify-between items-center transition-colors",
+                                idx === suggestionIndex ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                              )}
+                            >
+                              <span className="font-medium">{c.name}</span>
+                              <span className="text-[9px] text-primary uppercase font-bold">CRM Client</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {isGiveaway ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Date</label>
+                        <DatePicker
+                          date={giveawayDate}
+                          onStringChange={setGiveawayDate}
+                          className="h-9 text-xs"
+                        />
                       </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Name</label>
+                        <Input
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="Enter name"
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                    </div>
+                    {editingOrder && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 w-full border border-dashed border-indigo-200"
+                        onClick={() => {
+                          setIsGiveaway(false);
+                          setPaymentStatus("Unpaid");
+                          setClient(name || "");
+                          setDeadline(new Date().toISOString().split('T')[0]);
+                          setOrderNumber(generateNextOrderNo(new Date(), false));
+                        }}
+                      >
+                        <ArrowRight className="h-3 w-3 mr-1" /> Convert to Standard Order (Buyer wants to pay)
+                      </Button>
                     )}
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Order Date</label>
-                    <DatePicker
-                      date={newPayDate}
-                      onStringChange={setNewPayDate}
-                      className="h-9 text-xs"
-                    />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Delivery Deadline</label>
+                      <DatePicker
+                        date={deadline}
+                        onStringChange={setDeadline}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Payment Status</label>
+                      <Select value={paymentStatus} onValueChange={(v: any) => setPaymentStatus(v)}>
+                        <SelectTrigger className="h-9 text-xs shadow-none border-dashed bg-muted/30"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Unpaid">Unpaid</SelectItem>
+                          <SelectItem value="Partial">Partial</SelectItem>
+                          <SelectItem value="Paid">Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Delivery Deadline</label>
-                    <DatePicker
-                      date={deadline}
-                      onStringChange={setDeadline}
-                      className="h-9 text-xs"
-                    />
-                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Notes</label>
+                  <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Add internal notes..." className="h-9 text-xs" />
                 </div>
 
                 <div>
@@ -708,7 +814,7 @@ export default function Orders() {
                             <label className="text-[9px] uppercase font-bold text-muted-foreground mb-1 block md:hidden">Price</label>
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">₱</span>
-                              <Input type="number" placeholder="0" value={item.pricePerPack || ""} onChange={(e) => updateItem(idx, "pricePerPack", Number(e.target.value))} className="h-9 text-xs pl-5 bg-white/50" min={0} />
+                              <Input type="number" placeholder="0" value={item.pricePerPack || ""} onChange={(e) => updateItem(idx, "pricePerPack", Number(e.target.value))} className="h-9 text-xs pl-5 bg-white/50" min={0} disabled={isGiveaway} />
                             </div>
                           </div>
                           <div className="col-span-2 md:col-span-1 flex items-end justify-center">
@@ -822,15 +928,30 @@ export default function Orders() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
                         <h3 className="font-bold text-foreground">{o.client}</h3>
-                        <span className="text-[10px] bg-muted px-2 py-0.5 rounded-full font-mono text-muted-foreground">{o.order_no}</span>
+                        {o.payment_status !== "Gift" && (
+                          <span className="text-[10px] bg-muted px-2 py-0.5 rounded-full font-mono text-muted-foreground">{o.order_no}</span>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          Due: <span className="text-foreground font-medium">{o.delivery_deadline}</span>
-                        </p>
-                        {o.delivered_on && (
-                          <p className="text-xs text-success flex items-center gap-1">
-                            Delivered: <span className="font-medium">{o.delivered_on}</span>
+                        {o.payment_status === "Gift" ? (
+                          <div className="flex flex-wrap gap-x-3 items-center">
+                            <p className="text-xs font-bold text-primary flex items-center gap-1">
+                              <User className="h-3 w-3" /> {o.name || "N/A"}
+                            </p>
+                            {o.delivered_on && (
+                              <p className="text-[10px] text-muted-foreground italic">
+                                Given on {o.delivered_on}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            Due: <span className="text-foreground font-medium">{o.delivery_deadline}</span>
+                          </p>
+                        )}
+                        {o.notes && (
+                          <p className="text-[10px] text-muted-foreground/70 truncate max-w-[200px] flex items-center gap-1">
+                            <ArrowRight className="h-2 w-2" /> {o.notes}
                           </p>
                         )}
                       </div>
@@ -838,20 +959,28 @@ export default function Orders() {
 
                     <div className="flex items-center gap-4 text-right">
                       <div className="flex flex-col items-end">
-                        {adjustments[o.order_no]?.length > 0 ? (
+                        {o.payment_status === "Gift" ? (
                           <>
-                            <p className="text-lg font-black text-foreground leading-none">{formatCurrency(o.total_price - adjustments[o.order_no].reduce((s, a) => s + Number(a.amount), 0))}</p>
-                            <div className="flex items-center gap-1 mt-1">
-                              <span className="text-[9px] text-muted-foreground line-through decoration-destructive/30">{formatCurrency(o.total_price)}</span>
-                              <span className="text-[9px] text-destructive font-bold flex items-center gap-0.5">
-                                <Trash2 className="h-2 w-2" /> -{formatCurrency(adjustments[o.order_no].reduce((s, a) => s + Number(a.amount), 0))}
-                              </span>
-                            </div>
+                            <p className="text-lg font-black text-muted-foreground/30 leading-none">{formatCurrency(o.total_price)}</p>
                           </>
                         ) : (
-                          <p className="text-lg font-black text-foreground leading-none">{formatCurrency(o.total_price)}</p>
+                          <>
+                            {adjustments[o.order_no]?.length > 0 ? (
+                              <>
+                                <p className="text-lg font-black text-foreground leading-none">{formatCurrency(o.total_price - adjustments[o.order_no].reduce((s, a) => s + Number(a.amount), 0))}</p>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <span className="text-[9px] text-muted-foreground line-through decoration-destructive/30">{formatCurrency(o.total_price)}</span>
+                                  <span className="text-[9px] text-destructive font-bold flex items-center gap-0.5">
+                                    <Trash2 className="h-2 w-2" /> -{formatCurrency(adjustments[o.order_no].reduce((s, a) => s + Number(a.amount), 0))}
+                                  </span>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-lg font-black text-foreground leading-none">{formatCurrency(o.total_price)}</p>
+                            )}
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Paid: {formatCurrency(totalPaid)}</p>
+                          </>
                         )}
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Paid: {formatCurrency(totalPaid)}</p>
                       </div>
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -862,10 +991,11 @@ export default function Orders() {
                         {o.order_status}
                       </span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase text-center ${o.payment_status === "Paid" ? "bg-success/10 text-success" :
-                        o.payment_status === "Partial" ? "bg-orange-100 text-orange-700" :
-                          "bg-destructive/10 text-destructive"
+                        o.payment_status === "Gift" ? "bg-indigo-100 text-indigo-700 border border-indigo-200" :
+                          o.payment_status === "Partial" ? "bg-orange-100 text-orange-700" :
+                            "bg-destructive/10 text-destructive"
                         }`}>
-                        {o.payment_status}
+                        {o.payment_status === "Gift" ? "Giveaway" : o.payment_status}
                       </span>
                     </div>
                   </div>
@@ -904,27 +1034,37 @@ export default function Orders() {
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1 min-w-0 pr-2">
                             <h4 className="font-black text-sm text-foreground truncate group-hover:text-primary transition-colors">{o.client}</h4>
-                            <p className="text-[9px] font-mono text-muted-foreground mt-0.5">{o.order_no}</p>
+                            {o.payment_status !== 'Gift' && (
+                              <p className="text-[9px] font-mono text-muted-foreground mt-0.5">{o.order_no}</p>
+                            )}
                           </div>
                           <span className={cn(
                             "text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter border",
                             o.payment_status === 'Paid' ? "bg-success/5 text-success border-success/20" :
-                              o.payment_status === 'Partial' ? "bg-orange-50 text-orange-600 border-orange-200" :
-                                "bg-destructive/5 text-destructive border-destructive/20"
-                          )}>{o.payment_status}</span>
+                              o.payment_status === 'Gift' ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
+                                o.payment_status === 'Partial' ? "bg-orange-50 text-orange-600 border-orange-200" :
+                                  "bg-destructive/5 text-destructive border-destructive/20"
+                          )}>{o.payment_status === 'Gift' ? 'Giveaway' : o.payment_status}</span>
                         </div>
 
                         <div className="space-y-2 mt-4">
                           <div className="flex justify-between items-end">
                             <div>
-                              <p className="text-[8px] uppercase font-black text-muted-foreground tracking-widest mb-1">Due Date</p>
-                              <p className="text-[10px] font-bold text-foreground">{o.delivery_deadline}</p>
+                              <p className="text-[8px] uppercase font-black text-muted-foreground tracking-widest mb-1">{o.payment_status === 'Gift' ? 'Giveaway to' : 'Due Date'}</p>
+                              <p className="text-[10px] font-bold text-foreground">
+                                {o.payment_status === 'Gift' ? o.name || 'N/A' : o.delivery_deadline}
+                              </p>
                             </div>
                             <div className="text-right">
-                              {totalAdjusted > 0 && (
+                              {totalAdjusted > 0 && o.payment_status !== 'Gift' && (
                                 <p className="text-[8px] text-destructive font-black line-through mb-0.5 opacity-60">{formatCurrency(o.total_price)}</p>
                               )}
-                              <p className="text-sm font-black text-foreground">{formatCurrency(effectiveTotal)}</p>
+                              <p className={cn(
+                                "text-sm font-black",
+                                o.payment_status === 'Gift' ? "text-muted-foreground/30 italic" : "text-foreground"
+                              )}>
+                                {formatCurrency(effectiveTotal)}
+                              </p>
                             </div>
                           </div>
                         </div>
