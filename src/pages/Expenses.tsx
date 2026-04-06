@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EXPENSE_CATEGORIES } from "@/lib/mock-data";
-import { Plus, Trash2, Pencil, Wallet, ShoppingBag, Settings, Calendar } from "lucide-react";
+import { Plus, Trash2, Pencil, Wallet, ShoppingBag, Settings, Calendar, Layout } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -108,7 +108,8 @@ export default function Expenses() {
 
         if (error) {
             toast.error("Failed to record expenses");
-            console.error(error);
+            console.error("Supabase Error:", error);
+            console.log("Attempted to insert:", toInsert);
         } else {
             toast.success("Expenses recorded!");
             setEntries([{
@@ -390,8 +391,8 @@ export default function Expenses() {
                         key={cat}
                         label={cat}
                         value={formatCurrency(totalsByCategory[cat] || 0)}
-                        icon={cat === "Operational" ? Settings : cat === "Raw Ingredients" ? ShoppingBag : Wallet}
-                        variant={cat === "Operational" ? "warning" : cat === "Raw Ingredients" ? "success" : "default"}
+                        icon={cat === "Operational" ? Settings : cat === "Raw Ingredients" ? ShoppingBag : cat === "Miscellaneous" ? Layout : Wallet}
+                        variant={cat === "Operational" ? "warning" : cat === "Raw Ingredients" ? "success" : cat === "Miscellaneous" ? "default" : "default"}
                     />
                 ))}
             </div>
@@ -487,7 +488,8 @@ export default function Expenses() {
                                                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${e.category === "Raw Ingredients" ? "bg-orange-100 text-orange-700" :
                                                                 e.category === "Operational" ? "bg-blue-100 text-blue-700" :
                                                                     e.category === "Giveaway" ? "bg-indigo-100 text-indigo-700" :
-                                                                        "bg-green-100 text-green-700"
+                                                                        e.category === "Miscellaneous" ? "bg-slate-100 text-slate-700" :
+                                                                            "bg-green-100 text-green-700"
                                                             }`}>
                                                             {e.category}
                                                         </span>

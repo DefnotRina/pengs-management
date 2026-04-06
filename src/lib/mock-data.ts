@@ -35,7 +35,7 @@ export type PackSize = typeof PACK_SIZES[number];
 
 export const COOKS = ["Maria", "Juan", "Rosa", "Pedro", "Ana"] as const;
 
-export const EXPENSE_CATEGORIES = ["Operational", "Raw Ingredients", "Supplies", "Giveaway"] as const;
+export const EXPENSE_CATEGORIES = ["Operational", "Raw Ingredients", "Supplies", "Giveaway", "Miscellaneous"] as const;
 
 export interface PackingEntry {
     id: string;
