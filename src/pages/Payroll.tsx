@@ -16,7 +16,8 @@ import {
   addDays, 
   subDays, 
   format,
-  parseISO
+  parseISO,
+  getDay
 } from "date-fns";
 
 const formatCurrency = (v: number) => `₱${(Number(v) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -134,14 +135,25 @@ export default function Payroll() {
       }, {});
 
       packingData.forEach((entry: any) => {
-        const computedPieces = (entry.pack_size || 0) * (entry.packs_produced || 0);
+        const size = entry.pack_size || 0;
+        const packs = entry.packs_produced || 0;
+        const computedPieces = size * packs;
+        const units = Math.floor(computedPieces / 11);
+        const day = getDay(parseISO(entry.date)); // Sunday is 0
+        const rateToUse = (day === 0) ? 4.0 : pieceRate;
+        const entryPay = units * rateToUse;
+        
         if (empMap[entry.cook_name]) {
            empMap[entry.cook_name].totalPieces += computedPieces;
            empMap[entry.cook_name].detailedEntries.push({
                date: entry.date,
-               pack_size: entry.pack_size,
-               packs_produced: entry.packs_produced,
-               pieces: computedPieces
+               pack_size: size,
+               packs_produced: packs,
+               pieces: computedPieces,
+               units,
+               rate: rateToUse,
+               unitCalculation: `${packs} × ${size} = ${computedPieces} ÷ 11 = ${units}`,
+               entryPay
            });
         }
       });
@@ -149,8 +161,8 @@ export default function Payroll() {
       const computed = Object.values(empMap).map((c: any) => {
         let pay = 0;
         if (c.pay_type?.toLowerCase().includes('output')) {
-           const totalUnits = c.detailedEntries.reduce((sum: number, e: any) => sum + Math.floor(e.pieces / 11), 0);
-           pay = totalUnits * pieceRate;
+           // Floor the final total of all entries to remove any .50
+           pay = Math.floor(c.detailedEntries.reduce((sum: number, e: any) => sum + (e.entryPay || 0), 0));
         }
         return {
            ...c,
@@ -286,7 +298,7 @@ export default function Payroll() {
           : Number(selectedEmp.base_salary || 0);
 
       const actualDeduction = Math.min(grossIncome + totalBonus, totalDed);
-      const finalNetPay = Math.max(0, grossIncome + totalBonus - totalDed);
+      const finalNetPay = Math.floor(Math.max(0, grossIncome + totalBonus - totalDed));
 
       // Generate Payslip Receipt with Breakdown JSON
       const { error: receiptErr } = await supabase.from('payroll_receipts').insert({
@@ -382,7 +394,7 @@ export default function Payroll() {
           ? selectedEmp.computedPay 
           : Number(selectedEmp.base_salary || 0))
       : 0;
-  const currentNetPay = currentGross + currentTotalBonuses - currentTotalDeductions;
+  const currentNetPay = Math.floor(currentGross + currentTotalBonuses - currentTotalDeductions);
 
   // REUSABLE RECEIPT TEMPLATE FOR CLEAN RENDERING
   const ReceiptTemplate = ({ id, empData, receiptData, entries }: any) => (
@@ -398,45 +410,47 @@ export default function Payroll() {
               {empData?.pay_type?.toLowerCase().includes('output') && (
                   <div className="flex-1 border-r-2 border-dashed border-gray-200 pr-8">
                       <h3 
-                          className="font-bold mb-3 inline-block pb-1 uppercase tracking-widest"
-                          style={{ color: '#98a1ac', fontSize: '12px', letterSpacing: '1.7px' }}
+                          className="font-bold mb-3 inline-block pb-1 uppercase tracking-widest text-muted-foreground"
+                          style={{ fontSize: '11px', letterSpacing: '1.2px' }}
                       >
-                          PRODUCTION TIMELINE
+                          PRODUCTION SUMMARY
                       </h3>
                       <div className="space-y-1 mb-4 text-xs font-mono">
                           {/* Evenly Spread Header */}
                           <div 
                               className="grid grid-cols-4 gap-2 uppercase pb-1 border-b border-gray-200 font-mono"
-                              style={{ color: '#d4d5db', fontSize: '10px' }}
+                              style={{ color: '#d4d5db', fontSize: '9px' }}
                           >
                               <span className="text-left font-bold">Date</span>
                               <span className="text-center font-bold">Type</span>
                               <span className="text-center font-bold">Packs</span>
-                              <span className="text-right font-bold">÷11</span>
+                              <span className="text-right font-bold">Units</span>
                           </div>
                           {(entries || []).map((e: any, i: number) => {
-                              const rateUnits = Math.floor(e.pieces / 11);
+                              const units = Math.floor(e.pieces / 11);
                               return (
-                                  <div key={i} className="grid grid-cols-4 gap-2 items-center border-b border-gray-50 py-0.5 font-mono">
+                                  <div key={i} className="grid grid-cols-4 gap-2 items-center border-b border-gray-50 py-1.5 font-mono">
                                       <span 
                                           className="text-left font-bold"
-                                          style={{ color: '#4f515d', fontSize: '10px' }}
+                                          style={{ color: '#4f515d', fontSize: '9px' }}
                                       >
                                           {e.date}
                                       </span>
+                                      <div className="text-center">
+                                          <span className="text-[10px] text-gray-500">{e.pack_size}'s</span>
+                                      </div>
                                       <span 
                                           className="text-center font-bold"
                                           style={{ color: '#98a1ac', fontSize: '10px' }}
                                       >
-                                          {e.pack_size}'s
+                                          {e.packs_produced}
                                       </span>
-                                        <span 
-                                            className="text-center font-bold"
-                                            style={{ color: '#4f515d', fontSize: '10px' }}
-                                        >
-                                            {e.packs_produced}
-                                        </span>
-                                      <span className="text-right font-bold text-blue-700">{rateUnits}</span>
+                                      <span 
+                                          className="text-right font-bold px-1 rounded"
+                                          style={{ color: '#4f515d', fontSize: '12px' }}
+                                      >
+                                          {units}
+                                      </span>
                                   </div>
                               );
                           })}
@@ -445,7 +459,7 @@ export default function Payroll() {
                           )}
                       </div>
                       <div className="flex justify-between items-center text-sm font-bold pt-2 border-t-2 border-gray-300">
-                          <span style={{ fontSize: '14px' }}>Total Output</span>
+                          <span style={{ fontSize: '12px' }}>Weekly Unit Total</span>
                           <span className="text-blue-700 bg-blue-50 px-2 py-1 rounded">
                               {(entries || []).reduce((sum: number, e: any) => sum + Math.floor(e.pieces / 11), 0)}
                           </span>
