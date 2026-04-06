@@ -66,7 +66,7 @@ export default function Dashboard() {
                 { data: orderItems },
                 { data: adjustments }
             ] = await Promise.all([
-                supabase.from('packing').select('*'), 
+                supabase.from('packing').select('*').not('cook_name', 'ilike', 'System/%'), 
                 supabase.from('orders').select('*'),
                 supabase.from('expenses').select('*'),
                 supabase.from('order_payments').select('*'),

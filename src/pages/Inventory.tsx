@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/StatCard";
-import { AlertTriangle, PackageOpen, Trash2, Edit2, RefreshCw, Puzzle, XCircle, Plus, History, Package } from "lucide-react";
+import { AlertTriangle, PackageOpen, Trash2, Edit2, RefreshCw, Puzzle, XCircle, Plus, History, Package, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { PACK_SIZES, PRODUCTS } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,12 @@ export default function Inventory() {
     const [processingReturn, setProcessingReturn] = useState<any>(null);
     const [repackQty, setRepackQty] = useState("");
     const [repackProduct, setRepackProduct] = useState("");
+
+    // Manual Stock Adjustment
+    const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
+    const [selectedProductForAdj, setSelectedProductForAdj] = useState<any>(null);
+    const [physicalCount, setPhysicalCount] = useState("");
+    const [adjNote, setAdjNote] = useState("");
 
     const fetchInventory = async () => {
         setIsLoading(true);
@@ -336,6 +342,43 @@ export default function Inventory() {
                 setSaving(false);
             }
         });
+    };
+
+    const handleManualAdjustment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedProductForAdj) return;
+        
+        const currentStock = selectedProductForAdj.remaining;
+        const newStock = Number(physicalCount);
+        const difference = newStock - currentStock;
+        
+        if (difference === 0) {
+            setAdjustmentModalOpen(false);
+            return;
+        }
+
+        setSaving(true);
+        const txId = `ADJ:${selectedProductForAdj.productName.slice(0,3).toUpperCase()}:${crypto.randomUUID().slice(0, 4)}`;
+
+        const { error } = await supabase.from('packing').insert({
+            date: new Date().toISOString().split('T')[0],
+            cook_name: "System/Adjustment",
+            pack_size: selectedProductForAdj.packSize,
+            packs_produced: difference,
+            production_type: "Adjustment",
+            notes: `${adjNote || "Stock Audit"} [Prod:${selectedProductForAdj.productName}] [TX:${txId}]`
+        });
+
+        setSaving(false);
+        if (error) {
+            toast.error("Failed to save adjustment");
+        } else {
+            toast.success(`Stock adjusted by ${difference > 0 ? '+' : ''}${difference} packs`);
+            setAdjustmentModalOpen(false);
+            setPhysicalCount("");
+            setAdjNote("");
+            fetchInventory();
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -780,54 +823,78 @@ export default function Inventory() {
                         {/* Mobile cards */}
                         <div className="md:hidden divide-y divide-border">
                             {stock.map((p) => (
-                                <div key={p.productName} className="p-4">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <p className="text-sm font-bold text-foreground">{p.productName}</p>
-                                        {p.remaining === 0 ? (
-                                            <span className="flex items-center gap-1 text-xs text-destructive bg-destructive/10 px-2 py-0.5 rounded-full font-medium">
-                                                <XCircle className="h-3 w-3" /> No Stock
-                                            </span>
-                                        ) : p.remaining < 200 ? (
-                                            <span className="flex items-center gap-1 text-xs text-warning bg-warning/10 px-2 py-0.5 rounded-full font-medium">
-                                                <AlertTriangle className="h-3 w-3" /> Low
-                                            </span>
-                                        ) : (
-                                            <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full font-medium">In Stock</span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
-                                        <span className="font-bold uppercase tracking-wider text-[10px]">Current Stock</span>
-                                        <strong className={`text-base font-black ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>
-                                            {p.remaining.toLocaleString()}
-                                            <span className="text-[9px] font-bold ml-1 uppercase opacity-60">packs</span>
-                                        </strong>
+                                <div key={p.productName} className="relative overflow-hidden group">
+                                    {/* Actions (Hidden behind) */}
+                                    {isEditMode && role !== 'viewer' && (
+                                        <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-6 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
+                                            <Button variant="ghost" size="icon" className="h-10 w-10 text-blue-500 hover:bg-blue-50" 
+                                                onClick={() => { setSelectedProductForAdj(p); setPhysicalCount(String(p.remaining)); setAdjustmentModalOpen(true); }}>
+                                                <Pencil className="h-5 w-5" />
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {/* Main Card Content */}
+                                    <div className={`p-4 bg-card transition-transform duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-20' : ''}`}>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-sm font-bold text-foreground">{p.productName}</p>
+                                            <div className="flex items-center gap-2">
+                                                {p.remaining === 0 ? (
+                                                    <span className="flex items-center gap-1 text-xs text-destructive bg-destructive/10 px-2 py-0.5 rounded-full font-medium">
+                                                        <XCircle className="h-3 w-3" /> No Stock
+                                                    </span>
+                                                ) : p.remaining < 200 ? (
+                                                    <span className="flex items-center gap-1 text-xs text-warning bg-warning/10 px-2 py-0.5 rounded-full font-medium">
+                                                        <AlertTriangle className="h-3 w-3" /> Low
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full font-medium">In Stock</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">Current Stock</span>
+                                            <strong className={`text-base font-black ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>
+                                                {p.remaining.toLocaleString()}
+                                                <span className="text-[9px] font-bold ml-1 uppercase opacity-60">packs</span>
+                                            </strong>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
 
-                        {/* Desktop table */}
-                        <div className="hidden md:block overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-border text-muted-foreground bg-muted/5 uppercase tracking-[0.15em] text-[10px]">
-                                        <th className="text-left px-6 py-4 font-black">Product Name</th>
-                                        <th className="text-right px-6 py-4 font-black">Current Stock</th>
-                                        <th className="text-center px-6 py-4 font-black">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border">
-                                    {stock.map((p) => (
-                                        <tr key={p.productName} className="hover:bg-muted/5 transition-colors">
-                                            <td className="px-6 py-4 font-medium text-foreground">
-                                                <div className="text-sm font-bold">{p.productName}</div>
+                        {/* Desktop list */}
+                        <div className="hidden md:block">
+                            <div className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-border text-muted-foreground bg-muted/5 uppercase tracking-[0.15em] text-[10px] font-black">
+                                <div className="col-span-2">Product Name</div>
+                                <div className="text-right">Current Stock</div>
+                                <div className="text-center">Status</div>
+                            </div>
+                            <div className="divide-y divide-border">
+                                {stock.map((p) => (
+                                    <div key={p.productName} className="relative overflow-hidden group">
+                                        {/* Actions (Hidden behind) */}
+                                        {isEditMode && role !== 'viewer' && (
+                                            <div className="absolute right-0 top-0 h-full flex items-center gap-1 px-4 bg-muted/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
+                                                <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-500 hover:bg-blue-50"
+                                                    onClick={() => { setSelectedProductForAdj(p); setPhysicalCount(String(p.remaining)); setAdjustmentModalOpen(true); }}>
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        {/* Main Row Content */}
+                                        <div className={`p-4 grid grid-cols-4 gap-4 items-center bg-card transition-transform duration-300 ease-in-out ${isEditMode ? 'group-hover:-translate-x-28' : ''}`}>
+                                            <div className="col-span-2">
+                                                <div className="text-sm font-bold text-foreground">{p.productName}</div>
                                                 <div className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">{p.stickSize} Sticks</div>
-                                            </td>
-                                            <td className={`px-6 py-4 text-right font-black text-lg ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>
+                                            </div>
+                                            <div className={`text-right font-black text-lg ${p.remaining === 0 ? "text-destructive" : p.remaining < 200 ? "text-warning" : "text-success"}`}>
                                                 {p.remaining.toLocaleString()}
                                                 <span className="text-[10px] font-bold ml-1.5 opacity-50 uppercase">packs</span>
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
+                                            </div>
+                                            <div className="text-center">
                                                 {p.remaining === 0 ? (
                                                     <span className="inline-flex items-center gap-1 text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">
                                                         <XCircle className="h-3 w-3" /> No Stock
@@ -839,11 +906,11 @@ export default function Inventory() {
                                                 ) : (
                                                     <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full font-medium">In Stock</span>
                                                 )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </>
                 )}
@@ -891,10 +958,12 @@ export default function Inventory() {
                                                 <span className={`text-[8px] px-1 rounded uppercase font-bold border ${
                                                     conv.production_type === 'Waste' ? 'text-destructive bg-destructive/5 border-destructive/20' :
                                                     conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'text-success bg-success/5 border-success/20' :
+                                                    conv.production_type === 'Adjustment' ? 'text-blue-700 bg-blue-50 border-blue-200' :
                                                     conv.production_type === 'Unpacked' ? 'text-orange-600 bg-orange-50 border-orange-100' : 
                                                     'text-blue-600 bg-blue-50 border-blue-100'
                                                 }`}>
                                                     {conv.production_type === 'Waste' ? 'Waste' :
+                                                     conv.production_type === 'Adjustment' ? 'Adjustment' :
                                                      conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Recovered' : 
                                                      conv.production_type === 'Unpacked' ? 'Deducted' : 'Added'}
                                                 </span>
@@ -906,17 +975,19 @@ export default function Inventory() {
                                         <div className="text-right">
                                             <p className={`text-xs ${
                                                 conv.production_type === 'Waste' ? 'text-destructive' :
+                                                conv.production_type === 'Adjustment' ? (conv.packs_produced > 0 ? 'text-blue-700' : 'text-destructive') :
                                                 conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'text-success' :
                                                 conv.production_type === 'Unpacked' ? 'text-orange-600' : 
                                                 'text-blue-600'
                                             }`}>
                                                 {conv.production_type === 'Unpacked' 
                                                     ? `${Math.abs((conv.packs_produced || 0) * 11 + (conv.leftover_sticks || 0))} sticks` 
-                                                    : `${conv.packs_produced} packs`
+                                                    : `${conv.packs_produced > 0 ? '+' : ''}${conv.packs_produced} packs`
                                                 }
                                             </p>
                                             <p className="text-[9px] text-muted-foreground uppercase">
                                                 {conv.production_type === 'Waste' ? 'Thrown Out' :
+                                                 conv.production_type === 'Adjustment' ? (conv.packs_produced > 0 ? 'Found / Added' : 'Lost / Removed') :
                                                  conv.cook_name === 'System/Returns' && conv.production_type === 'Unpacked' ? 'Salvaged Back' :
                                                  conv.production_type === 'Unpacked' ? 'Deducted' : (conv.notes?.match(/\[Prod:(.*?)\]/)?.[1] || `${conv.pack_size}rd`)}
                                             </p>
@@ -928,6 +999,60 @@ export default function Inventory() {
                     )}
                 </div>
             </div>
+
+            {/* Manual Adjustment Dialog */}
+            <Dialog open={adjustmentModalOpen} onOpenChange={setAdjustmentModalOpen}>
+                <DialogContent className="max-w-[320px] p-6 rounded-2xl border-none shadow-2xl">
+                    <DialogHeader className="mb-4">
+                        <DialogTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
+                            <Pencil className="h-5 w-5 text-blue-500" />
+                            Adjust Stock
+                        </DialogTitle>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{selectedProductForAdj?.productName}</p>
+                    </DialogHeader>
+                    
+                    <form onSubmit={handleManualAdjustment} className="space-y-5">
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-end border-b border-dashed pb-4">
+                                <div>
+                                    <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Current</p>
+                                    <p className="text-xl font-bold">{selectedProductForAdj?.remaining} <span className="text-[10px] opacity-60">packs</span></p>
+                                </div>
+                                <div className="text-right">
+                                    <label className="text-[9px] font-black text-muted-foreground uppercase mb-1 block">New Count</label>
+                                    <Input 
+                                        type="number" 
+                                        value={physicalCount} 
+                                        onChange={e => setPhysicalCount(e.target.value)}
+                                        className="h-10 w-24 text-center font-bold text-lg bg-muted/30 border-none shadow-inner" 
+                                        autoFocus 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center px-1">
+                                <span className="text-[10px] font-bold text-muted-foreground uppercase">Adjustment:</span>
+                                <span className={`text-xs font-black ${Number(physicalCount) - (selectedProductForAdj?.remaining || 0) >= 0 ? "text-blue-600" : "text-destructive"}`}>
+                                    {Number(physicalCount) - (selectedProductForAdj?.remaining || 0) >= 0 ? "+" : ""}
+                                    {Number(physicalCount) - (selectedProductForAdj?.remaining || 0)} Packs
+                                </span>
+                            </div>
+
+                            <Input 
+                                value={adjNote} 
+                                onChange={e => setAdjNote(e.target.value)} 
+                                placeholder="Adjustment Note (Optional)"
+                                className="h-9 text-[11px] bg-muted/20 border-none focus-visible:ring-blue-400"
+                            />
+                        </div>
+
+                        <Button type="submit" disabled={saving} className="w-full h-12 font-black uppercase text-[10px] tracking-[0.2em] bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 rounded-xl transition-all active:scale-95">
+                            {saving ? "SAVING..." : "Apply Adjustment"}
+                        </Button>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             {/* Edit Dialog */}
             <Dialog open={!!editingEntry || !!editingTxId} onOpenChange={(open) => {

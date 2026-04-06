@@ -50,7 +50,7 @@ export default function Packing() {
     const { data: fetchedEntries, error } = await supabase
       .from('packing')
       .select('*')
-      .neq('cook_name', 'System/Packaging')
+      .not('cook_name', 'ilike', 'System/%')
       .order('created_at', { ascending: false });
       
     if (error) {
